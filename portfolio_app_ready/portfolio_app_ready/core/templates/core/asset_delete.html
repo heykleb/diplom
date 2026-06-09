@@ -1,0 +1,5 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<h2 class="page-title">Удаление актива</h2>
+<div class="card shadow-sm"><div class="card-body"><p>Вы действительно хотите удалить актив <strong>{{ asset.name }}</strong>?</p><form method="post">{% csrf_token %}<button type="submit" class="btn btn-danger">Удалить</button> <a href="{% url 'dashboard' %}" class="btn btn-secondary">Отмена</a></form></div></div>
+{% endblock %}

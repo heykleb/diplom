@@ -1,0 +1,209 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+
+<div class="chart-card">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:26px;">
+
+        <div>
+            <h2 style="font-weight:700;">
+                {{ asset.name }}
+            </h2>
+
+            <div style="color:#94A3B8;font-size:16px;">
+                {{ asset.ticker }} • Детальная карточка актива
+            </div>
+        </div>
+
+        <a href="{% url 'dashboard' %}" class="btn-main text-decoration-none">
+            Назад к портфелю
+        </a>
+
+    </div>
+
+    <div class="dashboard-grid">
+
+        <div class="card-box">
+            <div class="card-title">Текущая цена</div>
+            <div class="card-value" id="livePrice">
+                {{ asset.current_price }} $
+            </div>
+        </div>
+
+        <div class="card-box">
+            <div class="card-title">Изменение</div>
+            <div class="card-value" id="priceChange">
+                —
+            </div>
+        </div>
+
+        <div class="card-box">
+            <div class="card-title">Количество</div>
+            <div class="card-value">
+                {{ asset.quantity }}
+            </div>
+        </div>
+
+        <div class="card-box">
+            <div class="card-title">Стоимость позиции</div>
+            <div class="card-value" id="positionAmount">
+                {{ asset.amount }} $
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<div class="chart-card">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+
+        <div>
+            <h3 style="font-weight:700;">
+                История изменения цены
+            </h3>
+
+            <div style="color:#94A3B8;">
+                Динамика закрытия цены по выбранному периоду
+            </div>
+        </div>
+
+        <div style="display:flex;gap:10px;">
+
+            <button class="period-btn" data-period="5d">5 дней</button>
+            <button class="period-btn" data-period="1mo">1 месяц</button>
+            <button class="period-btn" data-period="6mo">6 месяцев</button>
+            <button class="period-btn" data-period="1y">1 год</button>
+
+        </div>
+
+    </div>
+
+    <canvas id="assetChart" height="100"></canvas>
+
+</div>
+
+<div class="ai-box">
+
+    <h3 style="font-weight:700;">
+        🤖 Аналитика по активу
+    </h3>
+
+    <div class="ai-item">
+        Система автоматически обновляет текущую цену и пересчитывает стоимость позиции.
+    </div>
+
+    <div class="ai-item">
+        Исторический график позволяет оценить динамику инструмента и возможную волатильность.
+    </div>
+
+</div>
+
+<style>
+    .period-btn{
+        background:#1E293B;
+        color:#CBD5E1;
+        border:1px solid #334155;
+        padding:10px 14px;
+        border-radius:12px;
+    }
+
+    .period-btn:hover{
+        background:#2563EB;
+        color:white;
+    }
+</style>
+
+<script>
+    let assetChart = null;
+
+    function loadHistory(period = '1mo') {
+        fetch(`/api/asset/{{ asset.id }}/history/?period=${period}`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById('assetChart');
+
+                if (assetChart) {
+                    assetChart.destroy();
+                }
+
+                assetChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: `Цена ${data.ticker}`,
+                            data: data.prices,
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: '#E2E8F0'
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: {
+                                    color: '#94A3B8'
+                                },
+                                grid: {
+                                    color: '#1E293B'
+                                }
+                            },
+                            y: {
+                                ticks: {
+                                    color: '#94A3B8'
+                                },
+                                grid: {
+                                    color: '#1E293B'
+                                }
+                            }
+                        }
+                    }
+                });
+            });
+    }
+
+    function updateLivePrice() {
+        fetch(`/api/asset/{{ asset.id }}/price/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) return;
+
+                document.getElementById('livePrice').innerText = data.price + ' $';
+                document.getElementById('positionAmount').innerText = data.amount + ' $';
+
+                const changeBlock = document.getElementById('priceChange');
+
+                if (data.change >= 0) {
+                    changeBlock.innerText = '+' + data.change + ' $ / +' + data.change_percent + '%';
+                    changeBlock.classList.remove('red');
+                    changeBlock.classList.add('green');
+                } else {
+                    changeBlock.innerText = data.change + ' $ / ' + data.change_percent + '%';
+                    changeBlock.classList.remove('green');
+                    changeBlock.classList.add('red');
+                }
+            });
+    }
+
+    document.querySelectorAll('.period-btn').forEach(button => {
+        button.addEventListener('click', function () {
+            loadHistory(this.dataset.period);
+        });
+    });
+
+    loadHistory('1mo');
+    updateLivePrice();
+
+    setInterval(updateLivePrice, 15000);
+</script>
+
+{% endblock %}

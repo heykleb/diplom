@@ -1,0 +1,168 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+
+<div class="chart-card">
+
+    <div style="margin-bottom:28px;">
+
+        <h2 style="font-weight:700;">
+            ➕ Добавление инвестиционного актива
+        </h2>
+
+        <div style="color:#94A3B8;">
+            Поиск и добавление финансовых инструментов
+        </div>
+
+    </div>
+
+    <form method="post">
+
+        {% csrf_token %}
+
+
+        <div class="ai-box" style="margin-top:0;margin-bottom:28px;">
+
+            <div style="font-weight:600;margin-bottom:14px;">
+                🔎 Поиск финансового инструмента
+            </div>
+
+            <div style="color:#94A3B8;margin-bottom:16px;">
+                Введите название компании или тикер.
+                Система автоматически подтянет название,
+                цену, историческую доходность и риск.
+            </div>
+
+            <input
+                type="text"
+                id="tickerSearch"
+                class="search w-100"
+                placeholder="Например: Apple, Tesla, Microsoft, AAPL, MSFT"
+            >
+
+            <select
+                id="tickerSelect"
+                class="search w-100 mt-3"
+                style="height:54px;"
+            >
+                <option value="">
+                    Выберите инструмент из списка
+                </option>
+            </select>
+
+        </div>
+
+        <div class="row">
+
+            <div class="col-md-6 mb-4">
+                <label class="form-label mb-2">Название актива</label>
+                {{ form.name }}
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <label class="form-label mb-2">Тикер</label>
+                {{ form.ticker }}
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <label class="form-label mb-2">Тип актива</label>
+                {{ form.asset_type }}
+            </div>
+
+            <div class="col-md-6 mb-4">
+                <label class="form-label mb-2">Количество</label>
+                {{ form.quantity }}
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <label class="form-label mb-2">Текущая цена</label>
+                {{ form.current_price }}
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <label class="form-label mb-2">Историческая доходность, %</label>
+                {{ form.expected_return }}
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <label class="form-label mb-2">Исторический риск, %</label>
+                {{ form.risk }}
+            </div>
+
+        </div>
+
+        <div style="display:flex;gap:16px;">
+
+            <button class="btn-main">
+                Сохранить актив
+            </button>
+
+            <a href="{% url 'dashboard' %}" class="btn btn-dark">
+                Назад
+            </a>
+
+        </div>
+
+    </form>
+
+</div>
+
+<script>
+const searchInput = document.getElementById('tickerSearch');
+const tickerSelect = document.getElementById('tickerSelect');
+
+let timer = null;
+
+searchInput.addEventListener('input', function () {
+    clearTimeout(timer);
+
+    const query = this.value.trim();
+
+    if (query.length < 2) return;
+
+    timer = setTimeout(() => {
+        fetch(`/api/ticker-search/?q=${encodeURIComponent(query)}`)
+            .then(response => response.json())
+            .then(data => {
+                tickerSelect.innerHTML = '<option value="">Выберите инструмент</option>';
+
+                data.results.forEach(item => {
+                    const option = document.createElement('option');
+                    option.value = item.symbol;
+                    option.textContent = `${item.symbol} — ${item.name} (${item.type})`;
+                    tickerSelect.appendChild(option);
+                });
+            })
+            .catch(error => console.log(error));
+    }, 500);
+});
+
+tickerSelect.addEventListener('change', function () {
+    const symbol = this.value;
+
+    if (!symbol) return;
+
+    fetch(`/api/ticker-info/?symbol=${encodeURIComponent(symbol)}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('id_name').value = data.name;
+            document.getElementById('id_ticker').value = data.symbol;
+            document.getElementById('id_current_price').value = data.price;
+            document.getElementById('id_expected_return').value = data.expected_return.toFixed(2);
+            document.getElementById('id_risk').value = data.risk.toFixed(2);
+
+            const typeSelect = document.getElementById('id_asset_type');
+
+            if (data.type === 'ETF') {
+                typeSelect.value = 'etf';
+            } else if (data.type === 'CRYPTOCURRENCY') {
+                typeSelect.value = 'crypto';
+            } else {
+                typeSelect.value = 'stock';
+            }
+        })
+        .catch(error => console.log(error));
+});
+</script>
+
+{% endblock %}

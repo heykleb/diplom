@@ -1,34 +1,65 @@
 {% extends 'core/base.html' %}
 {% block content %}
 
-<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px;">
+<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
     <div>
         <div style="font-size:20px; font-weight:600; color:var(--text-1); letter-spacing:-0.025em;">Дашборд</div>
-        <div style="font-size:13px; color:var(--text-3); margin-top:4px;">Текущее состояние инвестиционного портфеля</div>
+        <div style="font-size:13px; color:var(--text-3); margin-top:4px;">
+            {% if first_tx %}
+                Портфель с {{ first_tx.created_at|date:"d.m.Y" }}
+            {% else %}
+                Текущее состояние портфеля
+            {% endif %}
+        </div>
     </div>
-    <a href="{% url 'update_quotes' %}" style="display:inline-flex; align-items:center; gap:6px; background:transparent; color:var(--text-2); border:1px solid var(--border-md); border-radius:8px; padding:8px 16px; font-size:13px; font-weight:500; text-decoration:none;">↻ Обновить котировки</a>
+    <div style="display:flex; gap:8px; align-items:center;">
+        <!-- Выбор периода -->
+        <div style="display:flex; gap:4px; background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:4px;">
+            {% for p, label in periods %}
+            <a href="?period={{ p }}" style="padding:5px 10px; border-radius:6px; font-family:var(--mono); font-size:11px; text-decoration:none; transition:all 0.15s;
+                {% if period == p %}background:var(--bg-4); color:var(--text-1); border:1px solid var(--border-md);{% else %}color:var(--text-3);{% endif %}">
+                {{ label }}
+            </a>
+            {% endfor %}
+        </div>
+        <a href="{% url 'update_quotes' %}" style="display:inline-flex; align-items:center; background:transparent; color:var(--text-2); border:1px solid var(--border-md); border-radius:8px; padding:8px 14px; font-size:13px; text-decoration:none;">↻</a>
+    </div>
 </div>
 
 <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px;">
     <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:18px 20px;">
         <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px;">Стоимость</div>
         <div style="font-family:var(--mono); font-size:24px; font-weight:600; color:var(--text-1); letter-spacing:-0.03em;">${{ total_amount }}</div>
-        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">Обновлено в реальном времени</div>
+        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">Вложено: ${{ total_cost }}</div>
     </div>
     <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:18px 20px;">
-        <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px;">Доходность</div>
-        <div style="font-family:var(--mono); font-size:24px; font-weight:600; color:var(--green); letter-spacing:-0.03em;">+{{ portfolio_return }}%</div>
-        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">Историческая</div>
+        <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px;">P&L (всё время)</div>
+        {% if total_cost > 0 %}
+            <div style="font-family:var(--mono); font-size:24px; font-weight:600; color:{% if real_pnl >= 0 %}var(--green){% else %}var(--red){% endif %}; letter-spacing:-0.03em;">
+                {% if real_pnl >= 0 %}+{% endif %}${{ real_pnl }}
+            </div>
+            <div style="font-size:11px; color:{% if real_pnl_percent >= 0 %}var(--green){% else %}var(--red){% endif %}; margin-top:6px;">
+                {% if real_pnl_percent >= 0 %}+{% endif %}{{ real_pnl_percent }}% от вложенного
+            </div>
+        {% else %}
+            <div style="font-family:var(--mono); font-size:18px; font-weight:600; color:var(--text-3); letter-spacing:-0.03em;">—</div>
+            <div style="font-size:11px; color:var(--text-3); margin-top:6px;">Добавьте транзакции для расчёта</div>
+        {% endif %}
+    </div>
+    <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:18px 20px;">
+        <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px;">
+            Доходность за
+            {% if period == '1w' %}неделю{% elif period == '1m' %}месяц{% elif period == '3m' %}3 месяца{% elif period == '6m' %}6 месяцев{% elif period == '1y' %}год{% else %}всё время{% endif %}
+        </div>
+        <div style="font-family:var(--mono); font-size:24px; font-weight:600; color:{% if period_return >= 0 %}var(--green){% else %}var(--red){% endif %}; letter-spacing:-0.03em;">
+            {% if period_return >= 0 %}+{% endif %}{{ period_return }}%
+        </div>
+        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">По текущим позициям</div>
     </div>
     <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:18px 20px;">
         <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px;">Индекс риска</div>
         <div style="font-family:var(--mono); font-size:24px; font-weight:600; color:var(--red); letter-spacing:-0.03em;">{{ portfolio_risk }}%</div>
-        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">Среднее по портфелю</div>
-    </div>
-    <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:18px 20px;">
-        <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:10px;">Активов</div>
-        <div style="font-family:var(--mono); font-size:24px; font-weight:600; color:var(--text-1); letter-spacing:-0.03em;">{{ assets|length }}</div>
-        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">В портфеле</div>
+        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">Активов: {{ assets|length }}</div>
     </div>
 </div>
 
@@ -47,17 +78,18 @@
     </div>
     <table style="width:100%; border-collapse:collapse;">
         <thead>
-            <tr>
-                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Актив</th>
-                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Тикер</th>
-                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Тип</th>
-                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Стоимость</th>
-                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Доходность</th>
-                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Риск</th>
-                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Доля</th>
-                <th style="text-align:left; padding:11px 22px; border-bottom:1px solid var(--border); background:var(--bg-3);"></th>
-            </tr>
-        </thead>
+        <tr>
+            <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Актив</th>
+            <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Тикер</th>
+            <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Тип</th>
+            <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Стоимость</th>
+            <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Доходность</th>
+            <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">P&L</th>
+            <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Риск</th>
+            <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Доля</th>
+            <th style="text-align:left; padding:11px 22px; border-bottom:1px solid var(--border); background:var(--bg-3);"></th>
+        </tr>
+    </thead>
         <tbody>
         {% for asset in assets %}
         <tr onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background=''">
@@ -68,6 +100,14 @@
             <td style="padding:14px 22px; font-family:var(--mono); font-size:11px; color:var(--text-3); border-bottom:1px solid var(--border);">{{ asset.asset_type }}</td>
             <td style="padding:14px 22px; font-family:var(--mono); font-size:13px; color:var(--text-1); border-bottom:1px solid var(--border);">{{ asset.amount }} $</td>
             <td style="padding:14px 22px; font-family:var(--mono); font-size:13px; color:var(--green); border-bottom:1px solid var(--border);">+{{ asset.expected_return }}%</td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                <div style="font-family:var(--mono); font-size:13px; color:{% if asset.real_pnl >= 0 %}var(--green){% else %}var(--red){% endif %};">
+                    {% if asset.real_pnl >= 0 %}+{% endif %}${{ asset.real_pnl }}
+                </div>
+                <div style="font-size:11px; color:{% if asset.real_pnl_percent >= 0 %}var(--green){% else %}var(--red){% endif %}; margin-top:2px;">
+                    {% if asset.real_pnl_percent >= 0 %}+{% endif %}{{ asset.real_pnl_percent }}%
+                </div>
+            </td>
             <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
                 {% if asset.risk < 15 %}
                     <span style="display:inline-flex; align-items:center; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; font-family:var(--mono); background:var(--green-dim); color:var(--green); border:1px solid rgba(74,222,128,0.2);">Низкий</span>

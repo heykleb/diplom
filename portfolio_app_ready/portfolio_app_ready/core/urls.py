@@ -21,4 +21,8 @@ urlpatterns = [
     path('api/asset/<int:asset_id>/history/', views.asset_price_history, name='asset_price_history'),
     path('api/ticker-search/', views.ticker_search, name='ticker_search'),
     path('api/ticker-info/', views.ticker_info, name='ticker_info'),
+
+    path('transactions/', views.all_transactions, name='all_transactions'),
+
+    path('api/assets-search/', views.assets_search, name='assets_search'),
 ]

@@ -25,33 +25,30 @@ class PortfolioForm(forms.ModelForm):
 class AssetForm(forms.ModelForm):
     class Meta:
         model  = Asset
-        fields = ['name', 'ticker', 'asset_type', 'quantity', 'current_price', 'avg_buy_price', 'expected_return', 'risk']
+        fields = ['name', 'ticker', 'asset_type', 'quantity', 'current_price', 'expected_return', 'risk']
         widgets = {
             'name': forms.TextInput(attrs={
-                'class': 'auto-field', 'readonly': 'readonly',
+                'placeholder': 'Заполняется автоматически',
             }),
             'ticker': forms.TextInput(attrs={
-                'class': 'auto-field', 'readonly': 'readonly',
+                'placeholder': 'Заполняется автоматически',
             }),
-            'asset_type': forms.Select(attrs={
-                'class': 'auto-field',
-            }),
+            'asset_type': forms.Select(),
             'quantity': forms.NumberInput(attrs={
                 'step': '0.0001', 'min': '0',
                 'placeholder': 'Введите количество',
             }),
             'current_price': forms.NumberInput(attrs={
-                'step': '0.01', 'readonly': 'readonly', 'class': 'auto-field',
-            }),
-            'avg_buy_price': forms.NumberInput(attrs={
                 'step': '0.01',
-                'placeholder': 'Цена покупки',
+                'placeholder': 'Заполняется автоматически',
             }),
             'expected_return': forms.NumberInput(attrs={
-                'step': '0.01', 'readonly': 'readonly', 'class': 'auto-field',
+                'step': '0.01',
+                'placeholder': 'Заполняется автоматически',
             }),
             'risk': forms.NumberInput(attrs={
-                'step': '0.01', 'readonly': 'readonly', 'class': 'auto-field',
+                'step': '0.01',
+                'placeholder': 'Заполняется автоматически',
             }),
         }
 

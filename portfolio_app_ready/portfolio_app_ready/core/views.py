@@ -2,6 +2,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.core.cache import cache
+from django.db.models import Sum
+from django.db import models
 from .models import Asset, Portfolio, Transaction
 from .forms import AssetForm, PortfolioForm, TransactionForm
 import yfinance as yf
@@ -17,10 +19,36 @@ import json
 @login_required
 def dashboard(request):
     assets       = Asset.objects.filter(owner=request.user)
+    period       = request.GET.get('period', 'all')
     total_amount = sum(float(a.amount) for a in assets)
-    total_cost   = sum(float(a.total_cost) for a in assets)
-    pnl          = round(total_amount - total_cost, 2)
-    pnl_percent  = round((pnl / total_cost * 100), 2) if total_cost > 0 else 0
+    total_cost = sum(float(a.total_cost) for a in assets)
+
+    # Себестоимость из транзакций
+    tx_cost = Transaction.objects.filter(
+        owner=request.user, tx_type='buy'
+    ).aggregate(total=Sum('total'))['total'] or 0
+
+    tx_sold = Transaction.objects.filter(
+        owner=request.user, tx_type='sell'
+    ).aggregate(total=Sum('total'))['total'] or 0
+
+    total_invested = round(float(tx_cost) - float(tx_sold), 2)
+
+    # Если транзакций нет — берём из avg_buy_price
+    if total_invested <= 0:
+        total_invested = round(sum(
+            float(a.avg_buy_price or 0) * float(a.quantity)
+            for a in assets
+        ), 2)
+
+    # Считаем P&L только если есть данные о вложениях
+    has_cost_data = total_invested > 0
+
+    real_pnl         = round(total_amount - total_invested, 2) if has_cost_data else 0
+    real_pnl_percent = round(real_pnl / total_invested * 100, 2) if has_cost_data and total_invested > 0 else 0
+
+    # Доходность за период
+    period_return = _calc_period_return(assets, period)
 
     portfolio_return = 0
     portfolio_risk   = 0
@@ -31,6 +59,11 @@ def dashboard(request):
         portfolio_return += weight * asset.expected_return
         portfolio_risk   += weight * asset.risk
 
+    # Первая транзакция — дата создания портфеля
+    first_tx = Transaction.objects.filter(
+        owner=request.user, tx_type='buy'
+    ).order_by('created_at').first()
+
     chart_labels    = [a.ticker for a in assets]
     chart_data      = [float(a.amount) for a in assets]
     recommendations = _generate_recommendations(assets, portfolio_risk, portfolio_return)
@@ -39,14 +72,62 @@ def dashboard(request):
         'assets':           assets,
         'total_amount':     round(total_amount, 2),
         'total_cost':       round(total_cost, 2),
-        'pnl':              pnl,
-        'pnl_percent':      pnl_percent,
+        'real_pnl':         real_pnl,
+        'real_pnl_percent': real_pnl_percent,
+        'period_return':    period_return,
+        'period':           period,
         'portfolio_return': round(portfolio_return, 2),
         'portfolio_risk':   round(portfolio_risk, 2),
         'chart_labels':     json.dumps(chart_labels),
         'chart_data':       json.dumps(chart_data),
         'recommendations':  recommendations,
+        'first_tx':         first_tx,
+        'periods': [
+            ('1w',  '1Н'),
+            ('1m',  '1М'),
+            ('3m',  '3М'),
+            ('6m',  '6М'),
+            ('1y',  '1Г'),
+            ('all', 'Всё'),
+        ],
     })
+
+
+def _calc_period_return(assets, period):
+    if not assets:
+        return 0
+    tickers = [a.ticker for a in assets]
+    days    = {'1w': 7, '1m': 30, '3m': 90, '6m': 180, '1y': 365, 'all': 1825}.get(period, 1825)
+
+    cache_key = f'period_return_{"_".join(sorted(tickers))}_{period}'
+    cached    = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        end   = datetime.today()
+        start = end - timedelta(days=days)
+        total_now  = 0
+        total_then = 0
+
+        for asset in assets:
+            t    = yf.Ticker(asset.ticker)
+            hist = t.history(start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'))
+            if hist.empty:
+                continue
+            price_now  = float(hist['Close'].iloc[-1])
+            price_then = float(hist['Close'].iloc[0])
+            total_now  += price_now  * float(asset.quantity)
+            total_then += price_then * float(asset.quantity)
+
+        if total_then == 0:
+            return 0
+
+        result = round((total_now - total_then) / total_then * 100, 2)
+        cache.set(cache_key, result, 60 * 60)
+        return result
+    except Exception:
+        return 0
 
 
 def _generate_recommendations(assets, risk, ret):
@@ -77,9 +158,26 @@ def asset_create(request):
     if request.method == 'POST':
         form = AssetForm(request.POST)
         if form.is_valid():
-            asset       = form.save(commit=False)
-            asset.owner = request.user
+            asset               = form.save(commit=False)
+            asset.owner         = request.user
+            asset.avg_buy_price = asset.current_price
             asset.save()
+
+            try:
+                Transaction.objects.create(
+                    owner        = request.user,
+                    asset        = asset,
+                    asset_ticker = asset.ticker,
+                    asset_name   = asset.name,
+                    tx_type      = 'buy',
+                    quantity     = asset.quantity,
+                    price        = asset.avg_buy_price,
+                    total        = round(float(asset.quantity) * float(asset.avg_buy_price), 2),
+                    note         = 'Создано при добавлении актива',
+                )
+            except Exception as e:
+                print(f'Transaction error: {e}')
+
             cache.delete(f'sidebar_{request.user.id}')
             return redirect('dashboard')
     return render(request, 'core/asset_form.html', {'form': form})
@@ -87,14 +185,60 @@ def asset_create(request):
 
 @login_required
 def asset_update(request, asset_id):
-    asset = get_object_or_404(Asset, id=asset_id, owner=request.user)
-    form  = AssetForm(instance=asset)
+    asset    = get_object_or_404(Asset, id=asset_id, owner=request.user)
+    old_qty  = asset.quantity
+    old_price = float(asset.current_price)
+    form     = AssetForm(instance=asset)
+
     if request.method == 'POST':
         form = AssetForm(request.POST, instance=asset)
         if form.is_valid():
-            form.save()
+            updated = form.save(commit=False)
+            new_qty = updated.quantity
+            new_price = float(updated.current_price)
+
+            updated.save()
+
+            # Если количество увеличилось — фиксируем покупку
+            if new_qty > old_qty:
+                diff_qty = round(new_qty - old_qty, 6)
+                Transaction.objects.create(
+                    owner              = request.user,
+                    asset              = updated,
+                    asset_ticker       = updated.ticker,
+                    asset_name         = updated.name,
+                    tx_type            = 'buy',  # или 'sell'
+                    quantity           = diff_qty,
+                    price              = updated.current_price,
+                    total              = round(diff_qty * new_price, 2),
+                    note               = 'Автоматически при изменении актива',
+                )
+                # Пересчитываем среднюю цену
+                old_total = old_qty * float(asset.avg_buy_price or old_price)
+                new_total = diff_qty * new_price
+                updated.avg_buy_price = round(
+                    (old_total + new_total) / new_qty, 2
+                ) if new_qty > 0 else updated.avg_buy_price
+                updated.save()
+
+            # Если количество уменьшилось — фиксируем продажу
+            elif new_qty < old_qty:
+                diff_qty = round(old_qty - new_qty, 6)
+                Transaction.objects.create(
+                    owner              = request.user,
+                    asset              = updated,
+                    asset_ticker       = updated.ticker,
+                    asset_name         = updated.name,
+                    tx_type            = 'buy',  # или 'sell'
+                    quantity           = diff_qty,
+                    price              = updated.current_price,
+                    total              = round(diff_qty * new_price, 2),
+                    note               = 'Автоматически при изменении актива',
+                )
+
             cache.delete(f'sidebar_{request.user.id}')
             return redirect('dashboard')
+
     return render(request, 'core/asset_form.html', {'form': form, 'asset': asset})
 
 
@@ -102,11 +246,29 @@ def asset_update(request, asset_id):
 def asset_delete(request, asset_id):
     asset = get_object_or_404(Asset, id=asset_id, owner=request.user)
     if request.method == 'POST':
+        # Сохраняем данные ДО удаления
+        ticker = asset.ticker
+        name   = asset.name
+        qty    = asset.quantity
+        price  = asset.current_price
+
+        if float(qty) > 0 and float(price) > 0:
+            Transaction.objects.create(
+            owner              = request.user,
+            asset              = None,
+            asset_ticker       = ticker,
+            asset_name         = name,
+            tx_type            = 'sell',
+            quantity           = qty,
+            price              = price,
+            total              = round(float(qty) * float(price), 2),
+            note               = 'Автоматически при удалении актива',
+        )
+
         asset.delete()
         cache.delete(f'sidebar_{request.user.id}')
         return redirect('dashboard')
     return render(request, 'core/asset_delete.html', {'asset': asset})
-
 
 @login_required
 def asset_detail(request, asset_id):
@@ -119,6 +281,39 @@ def asset_detail(request, asset_id):
 
 
 # ── Transactions ───────────────────────────────────────────────────────────────
+
+@login_required
+def all_transactions(request):
+    tx_type  = request.GET.get('type', 'all')
+    ticker   = request.GET.get('ticker', '')
+
+    transactions = Transaction.objects.filter(
+        owner=request.user
+    ).select_related('asset').order_by('-created_at')
+
+    if tx_type != 'all':
+        transactions = transactions.filter(tx_type=tx_type)
+
+    if ticker:
+        transactions = transactions.filter(asset__ticker__icontains=ticker)
+
+    # Статистика
+    from django.db.models import Sum, Count
+    stats = Transaction.objects.filter(owner=request.user).aggregate(
+        total_bought  = Sum('total', filter=__import__('django.db.models', fromlist=['Q']).Q(tx_type='buy')),
+        total_sold    = Sum('total', filter=__import__('django.db.models', fromlist=['Q']).Q(tx_type='sell')),
+        total_count   = Count('id'),
+    )
+
+    tickers = Asset.objects.filter(owner=request.user).values_list('ticker', flat=True)
+
+    return render(request, 'core/all_transactions.html', {
+        'transactions': transactions,
+        'tx_type':      tx_type,
+        'ticker':       ticker,
+        'tickers':      tickers,
+        'stats':        stats,
+    })
 
 @login_required
 def transaction_list(request, asset_id):
@@ -165,6 +360,29 @@ def transaction_create(request, asset_id):
 
 
 # ── API ────────────────────────────────────────────────────────────────────────
+
+@login_required
+def assets_search(request):
+    q      = request.GET.get('q', '').strip()
+    assets = Asset.objects.filter(owner=request.user)
+
+    if q:
+        from django.db.models import Q
+        assets = assets.filter(
+            Q(ticker__icontains=q) |
+            Q(name__icontains=q)   |
+            Q(asset_type__icontains=q)
+        )
+
+    data = [{
+        'id':         a.id,
+        'ticker':     a.ticker,
+        'name':       a.name,
+        'amount':     float(a.amount),
+        'asset_type': a.get_asset_type_display(),
+    } for a in assets[:8]]
+
+    return JsonResponse({'assets': data})
 
 @login_required
 def asset_live_price(request, asset_id):
@@ -266,7 +484,7 @@ def ticker_info(request):
         risk         = round(float(returns.std()) * (252 ** 0.5) * 100, 2)
         quote_type   = t.info.get('quoteType', 'EQUITY')
         data = {
-            'name':            symbol,
+            'name':            t.info.get('longName') or t.info.get('shortName') or symbol,
             'symbol':          symbol,
             'price':           round(float(info.last_price), 2),
             'expected_return': expected_ret,
@@ -286,14 +504,13 @@ def update_quotes(request):
         try:
             t     = yf.Ticker(asset.ticker)
             price = round(float(t.fast_info.last_price), 2)
-            asset.current_price = price
+            asset.current_price = price  # только current_price
             asset.save()
             cache.delete(f'live_price_{asset.ticker}')
         except Exception:
             continue
     cache.delete(f'sidebar_{request.user.id}')
     return redirect('dashboard')
-
 
 # ── Analytics ──────────────────────────────────────────────────────────────────
 
@@ -322,7 +539,41 @@ def risk_analysis(request):
 def model_docs(request):
     return render(request, 'core/model_docs.html')
 
+@login_required
+def model_docs(request):
+    return render(request, 'core/model_docs.html')
 
+
+@login_required
+def all_transactions(request):
+    from django.db.models import Sum, Count, Q
+    tx_type = request.GET.get('type', 'all')
+    ticker  = request.GET.get('ticker', '')
+    transactions = Transaction.objects.filter(
+        owner=request.user
+    ).select_related('asset').order_by('-created_at')
+    if tx_type != 'all':
+        transactions = transactions.filter(tx_type=tx_type)
+    if ticker:
+        transactions = transactions.filter(asset__ticker__icontains=ticker)
+    stats = Transaction.objects.filter(owner=request.user).aggregate(
+        total_bought = Sum('total', filter=Q(tx_type='buy')),
+        total_sold   = Sum('total', filter=Q(tx_type='sell')),
+        total_count  = Count('id'),
+    )
+    tickers = Asset.objects.filter(owner=request.user).values_list('ticker', flat=True)
+    return render(request, 'core/all_transactions.html', {
+        'transactions': transactions,
+        'tx_type':      tx_type,
+        'ticker':       ticker,
+        'tickers':      tickers,
+        'stats':        stats,
+        'types': [
+            ('all',      'Все'),
+            ('buy',      'Покупки'),
+            ('sell',     'Продажи'),
+        ],
+    })
 # ── Optimizer helpers ──────────────────────────────────────────────────────────
 
 def _fetch_returns(tickers, period_days=365):
@@ -495,9 +746,12 @@ def _monte_carlo(mean_returns, cov_matrix, risk_free, n_portfolios=1000):
     return mc_ret, mc_risk, mc_sharpe, mc_weights
 
 
-def _generate_optimizer_recommendations(rebalance, portfolio_metrics, minvol_metrics, var_data):
-    recs = []
+def _generate_optimizer_recommendations(rebalance, rebalance_minvol, portfolio_metrics, minvol_metrics, var_data):
+    
+    sharpe_recs = []
+    minvol_recs = []
 
+    # ── Рекомендации для Макс. Sharpe ─────────────────────────────────────
     overweight  = [r for r in rebalance if r['action'] == 'sell' and r['diff_weight'] > 5]
     underweight = [r for r in rebalance if r['action'] == 'buy'  and r['diff_weight'] > 5]
     hold        = [r for r in rebalance if r['action'] == 'hold']
@@ -505,59 +759,120 @@ def _generate_optimizer_recommendations(rebalance, portfolio_metrics, minvol_met
     if overweight:
         names      = ', '.join(r['ticker'] for r in overweight)
         total_sell = sum(r['diff_val'] for r in overweight)
-        recs.append({
+        sharpe_recs.append({
             'type':  'danger',
             'title': 'Избыточная концентрация',
-            'text':  f'Активы {names} занимают слишком большую долю. Рекомендуется сократить позиции на общую сумму ${total_sell:,.2f} для снижения риска.',
+            'text':  f'Активы {names} занимают слишком большую долю. Сократите позиции на ${total_sell:,.2f} для снижения риска.',
         })
 
     if underweight:
         names     = ', '.join(r['ticker'] for r in underweight)
         total_buy = sum(r['diff_val'] for r in underweight)
-        recs.append({
+        sharpe_recs.append({
             'type':  'info',
-            'title': 'Недостаточная диверсификация',
-            'text':  f'Модель рекомендует увеличить позиции в {names} на общую сумму ${total_buy:,.2f} для улучшения соотношения риска и доходности.',
+            'title': 'Увеличьте эти позиции',
+            'text':  f'Докупите {names} на ${total_buy:,.2f} — модель считает их оптимальными для максимизации доходности на единицу риска.',
         })
 
     if hold and len(hold) == len(rebalance):
-        recs.append({
+        sharpe_recs.append({
             'type':  'success',
             'title': 'Портфель сбалансирован',
-            'text':  'Текущая структура портфеля близка к оптимальной. Существенных изменений не требуется.',
+            'text':  'Текущая структура близка к оптимальной по Sharpe. Существенных изменений не требуется.',
         })
 
     if portfolio_metrics['sharpe'] > 1:
-        recs.append({
+        sharpe_recs.append({
             'type':  'success',
-            'title': 'Высокий коэффициент Шарпа',
-            'text':  f'Sharpe = {portfolio_metrics["sharpe"]} — отличное соотношение доходности и риска.',
+            'title': f'Sharpe = {portfolio_metrics["sharpe"]} — отлично',
+            'text':  'Портфель эффективно компенсирует принятый риск. За каждый процент риска вы получаете хорошую доходность.',
         })
-    elif portfolio_metrics['sharpe'] < 0.5:
-        recs.append({
+    elif portfolio_metrics['sharpe'] > 0.5:
+        sharpe_recs.append({
             'type':  'warning',
-            'title': 'Низкий коэффициент Шарпа',
-            'text':  f'Sharpe = {portfolio_metrics["sharpe"]} — портфель недостаточно эффективен. Рассмотрите замену низкодоходных активов.',
+            'title': f'Sharpe = {portfolio_metrics["sharpe"]} — приемлемо',
+            'text':  'Портфель умеренно эффективен. Следуйте плану ребалансировки для улучшения показателя.',
+        })
+    else:
+        sharpe_recs.append({
+            'type':  'danger',
+            'title': f'Sharpe = {portfolio_metrics["sharpe"]} — низкий',
+            'text':  'Портфель берёт слишком много риска относительно доходности. Рассмотрите замену высоковолатильных активов на ETF или облигации.',
         })
 
     if var_data['var_percent'] > 3:
-        recs.append({
+        sharpe_recs.append({
             'type':  'danger',
             'title': 'Высокий дневной риск',
-            'text':  f'VaR 95% = {var_data["var_percent"]}% — в неблагоприятный день портфель может потерять ${var_data["var_money"]}. Рассмотрите добавление защитных активов.',
+            'text':  f'В плохой день портфель может потерять до ${var_data["var_money"]}. Добавьте защитные активы: золото (GLD), облигации (TLT, BND).',
+        })
+    elif var_data['var_percent'] > 1.5:
+        sharpe_recs.append({
+            'type':  'warning',
+            'title': 'Умеренный дневной риск',
+            'text':  f'VaR = {var_data["var_percent"]}% — возможные дневные потери ${var_data["var_money"]}. Приемлемый уровень для агрессивного портфеля.',
+        })
+    else:
+        sharpe_recs.append({
+            'type':  'success',
+            'title': 'Низкий дневной риск',
+            'text':  f'VaR = {var_data["var_percent"]}% — портфель хорошо защищён от резких дневных потерь.',
+        })
+
+    # ── Рекомендации для Мин. риска ────────────────────────────────────────
+    overweight_mv  = [r for r in rebalance_minvol if r['action'] == 'sell' and r['diff_weight'] > 5]
+    underweight_mv = [r for r in rebalance_minvol if r['action'] == 'buy'  and r['diff_weight'] > 5]
+    hold_mv        = [r for r in rebalance_minvol if r['action'] == 'hold']
+
+    if overweight_mv:
+        names      = ', '.join(r['ticker'] for r in overweight_mv)
+        total_sell = sum(r['diff_val'] for r in overweight_mv)
+        minvol_recs.append({
+            'type':  'danger',
+            'title': 'Снизьте волатильные позиции',
+            'text':  f'Для консервативной стратегии {names} слишком рискованны. Продайте на ${total_sell:,.2f} и переложите в стабильные активы.',
+        })
+
+    if underweight_mv:
+        names     = ', '.join(r['ticker'] for r in underweight_mv)
+        total_buy = sum(r['diff_val'] for r in underweight_mv)
+        minvol_recs.append({
+            'type':  'info',
+            'title': 'Увеличьте защитные позиции',
+            'text':  f'Докупите {names} на ${total_buy:,.2f} — эти активы снизят общую волатильность портфеля.',
+        })
+
+    if hold_mv and len(hold_mv) == len(rebalance_minvol):
+        minvol_recs.append({
+            'type':  'success',
+            'title': 'Консервативный портфель сбалансирован',
+            'text':  'Текущая структура близка к минимально рискованной. Изменений не требуется.',
+        })
+
+    if minvol_metrics['sharpe'] > 0.5:
+        minvol_recs.append({
+            'type':  'success',
+            'title': f'Sharpe = {minvol_metrics["sharpe"]} — достаточно',
+            'text':  f'Консервативный портфель даёт риск {minvol_metrics["risk"]}% при доходности +{minvol_metrics["return"]}%. Хороший выбор для защиты капитала.',
+        })
+    else:
+        minvol_recs.append({
+            'type':  'warning',
+            'title': f'Sharpe = {minvol_metrics["sharpe"]} — низкий',
+            'text':  f'Консервативный портфель слабо окупает риск. Рассмотрите добавление облигаций (TLT, BND) или дивидендных ETF (VYM, SCHD).',
         })
 
     ret_diff  = round(portfolio_metrics['return'] - minvol_metrics['return'], 2)
     risk_diff = round(portfolio_metrics['risk']   - minvol_metrics['risk'],   2)
 
-    if risk_diff > 5:
-        recs.append({
+    if risk_diff > 3:
+        minvol_recs.append({
             'type':  'info',
-            'title': 'Альтернативная стратегия',
-            'text':  f'Портфель минимального риска даёт на {risk_diff}% меньше волатильности, теряя всего {ret_diff}% доходности.',
+            'title': 'Сравнение со стратегией Макс. Sharpe',
+            'text':  f'Консервативный портфель на {risk_diff}% менее рискованный, но даёт на {ret_diff}% меньше доходности. Выбор зависит от вашей готовности к риску.',
         })
 
-    return recs
+    return sharpe_recs, minvol_recs
 
 
 # ── Optimizer ──────────────────────────────────────────────────────────────────
@@ -627,7 +942,7 @@ def optimizer(request):
         minvol_weights, mean_returns, cov_matrix, risk_free / 100
     )
 
-    # 5. Метрики по активам
+    # 5. Metrics
     optimized = []
     for i, asset in enumerate(assets_filtered):
         if asset.ticker not in available_tickers:
@@ -641,7 +956,7 @@ def optimizer(request):
         asset.minvol_weight  = round(minvol_weights[idx] * 100, 1)
         optimized.append(asset)
 
-    # 6. Ребалансировка
+    # 6. Rebalance - max sharpe
     total_current = sum(float(a.amount) for a in assets_filtered)
     rebalance     = []
 
@@ -680,7 +995,45 @@ def optimizer(request):
     total_to_buy  = round(sum(r['diff_val'] for r in rebalance if r['action'] == 'buy'), 2)
     total_to_sell = round(sum(r['diff_val'] for r in rebalance if r['action'] == 'sell'), 2)
 
-    # 7. Эффективная граница
+    # 6.1 Rebalance - min volatility
+    rebalance_minvol = []
+
+    for asset in optimized:
+        idx            = available_tickers.index(asset.ticker)
+        current_val    = float(asset.amount)
+        current_weight = round(current_val / total_current * 100, 1) if total_current > 0 else 0
+        optimal_weight = asset.minvol_weight
+        optimal_val    = round(total_current * minvol_weights[idx], 2)
+        diff_val       = round(optimal_val - current_val, 2)
+        diff_weight    = round(optimal_weight - current_weight, 1)
+        price          = float(asset.current_price) if float(asset.current_price) > 0 else 1
+        shares_diff    = round(abs(diff_val) / price, 4)
+
+        if abs(diff_weight) < 1.0:
+            action = 'hold'
+        elif diff_val > 0:
+            action = 'buy'
+        else:
+            action = 'sell'
+
+        rebalance_minvol.append({
+            'name':           asset.name,
+            'ticker':         asset.ticker,
+            'current_val':    round(current_val, 2),
+            'current_weight': current_weight,
+            'optimal_weight': optimal_weight,
+            'optimal_val':    optimal_val,
+            'diff_val':       round(abs(diff_val), 2),
+            'diff_weight':    round(abs(diff_weight), 1),
+            'shares_diff':    shares_diff,
+            'action':         action,
+            'price':          round(price, 2),
+        })
+
+    total_to_buy_mv  = round(sum(r['diff_val'] for r in rebalance_minvol if r['action'] == 'buy'), 2)
+    total_to_sell_mv = round(sum(r['diff_val'] for r in rebalance_minvol if r['action'] == 'sell'), 2)
+
+    # 7. Efficient frontier
     frontier_risk, frontier_ret = _efficient_frontier(
         mean_returns, cov_matrix, bounds, constraints
     )
@@ -690,7 +1043,7 @@ def optimizer(request):
         mean_returns, cov_matrix, risk_free / 100, n_portfolios=1000
     )
 
-    # 9. Корреляция
+    # 9. Correlation
     corr_matrix = returns_df.corr().round(3).values.tolist()
 
     # 10. VaR / CVaR
@@ -709,20 +1062,26 @@ def optimizer(request):
         'portfolio_value': round(total_val, 2),
     }
 
-    # 11. Рекомендации
+    # 11. Recommendations
     portfolio_metrics = {'return': sharpe_ret, 'risk': sharpe_vol, 'sharpe': sharpe_val}
     minvol_metrics    = {'return': minvol_ret, 'risk': minvol_vol, 'sharpe': minvol_sharpe}
 
-    optimizer_recommendations = _generate_optimizer_recommendations(
-        rebalance, portfolio_metrics, minvol_metrics, var_data
+    sharpe_recs, minvol_recs = _generate_optimizer_recommendations(
+        rebalance, rebalance_minvol, portfolio_metrics, minvol_metrics, var_data
     )
 
     context.update({
-        'portfolio_metrics': portfolio_metrics,
-        'minvol_metrics':    minvol_metrics,
-        'optimized':         optimized,
-        'rebalance':         rebalance,
-        'optimizer_recommendations': optimizer_recommendations,
+        'portfolio_metrics':         portfolio_metrics,
+        'minvol_metrics':            minvol_metrics,
+        'optimized':                 optimized,
+        'rebalance':                 rebalance,
+        'rebalance_minvol':          rebalance_minvol,
+        'optimizer_recommendations': sharpe_recs,
+        'minvol_recs':               minvol_recs,
+        'total_to_buy':              total_to_buy,
+        'total_to_sell':             total_to_sell,
+        'total_to_buy_mv':           total_to_buy_mv,
+        'total_to_sell_mv':          total_to_sell_mv,
         'frontier': {
             'risk':   json.dumps(frontier_risk),
             'return': json.dumps(frontier_ret),
@@ -739,8 +1098,6 @@ def optimizer(request):
             'values':  json.dumps(corr_matrix),
         },
         'var_data': var_data,
-        'total_to_buy':  total_to_buy,
-        'total_to_sell': total_to_sell,
     })
 
     return render(request, 'core/optimizer.html', context)

@@ -17,10 +17,10 @@
         <div style="flex:1; min-width:180px;">
             <label style="display:block; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Безрисковая ставка</label>
             <select name="risk_free" style="width:100%; background:var(--bg-3); border:1px solid var(--border); border-radius:8px; color:var(--text-1); font-family:var(--sans); font-size:13px; padding:9px 12px;">
-                <option value="4.5"  {% if risk_free_rate == 4.5  %}selected{% endif %}>🇺🇸 США — 4.5% (трежерис)</option>
-                <option value="16.0" {% if risk_free_rate == 16.0 %}selected{% endif %}>🇷🇺 Россия — 16% (ОФЗ)</option>
-                <option value="2.5"  {% if risk_free_rate == 2.5  %}selected{% endif %}>🇪🇺 Европа — 2.5% (бунды)</option>
-                <option value="5.0"  {% if risk_free_rate == 5.0  %}selected{% endif %}>🌍 По умолчанию — 5%</option>
+                <option value="4.5"  {% if risk_free_rate == 4.5  %}selected{% endif %}>🇺🇸 США — 4.5%</option>
+                <option value="16.0" {% if risk_free_rate == 16.0 %}selected{% endif %}>🇷🇺 Россия — 16%</option>
+                <option value="2.5"  {% if risk_free_rate == 2.5  %}selected{% endif %}>🇪🇺 Европа — 2.5%</option>
+                <option value="5.0"  {% if risk_free_rate == 5.0  %}selected{% endif %}>По умолчанию — 5%</option>
                 <option value="0.0"  {% if risk_free_rate == 0.0  %}selected{% endif %}>Без ставки — 0%</option>
             </select>
         </div>
@@ -98,21 +98,120 @@
 </div>
 
 <!-- Рекомендации -->
-{% if optimizer_recommendations %}
-<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:16px;">
-    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
-        <div style="width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s ease-in-out infinite;"></div>
-        <div style="font-size:14px; font-weight:600; color:var(--text-1);">Рекомендации</div>
+{% if optimizer_recommendations or minvol_recs %}
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+
+    <!-- Макс. Sharpe -->
+    <div style="background:var(--bg-2); border:1px solid rgba(96,165,250,0.2); border-radius:16px; padding:20px 22px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+            <div style="width:6px; height:6px; border-radius:50%; background:var(--blue);"></div>
+            <div style="font-size:13px; font-weight:600; color:var(--text-1);">Рекомендации · Макс. Sharpe</div>
+        </div>
+        {% for rec in optimizer_recommendations %}
+        <div style="background:var(--bg-3); border:1px solid {% if rec.type == 'danger' %}rgba(248,113,113,0.25){% elif rec.type == 'success' %}rgba(74,222,128,0.2){% elif rec.type == 'warning' %}rgba(251,191,36,0.2){% else %}rgba(96,165,250,0.2){% endif %}; border-radius:8px; padding:12px 14px; margin-bottom:8px; display:flex; gap:10px; align-items:flex-start;">
+            <div style="width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:4px; background:{% if rec.type == 'danger' %}var(--red){% elif rec.type == 'success' %}var(--green){% elif rec.type == 'warning' %}var(--amber){% else %}var(--blue){% endif %};"></div>
+            <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text-1); margin-bottom:3px;">{{ rec.title }}</div>
+                <div style="font-size:12px; color:var(--text-3); line-height:1.6;">{{ rec.text }}</div>
+            </div>
+        </div>
+        {% endfor %}
     </div>
-    {% for rec in optimizer_recommendations %}
-    <div style="background:var(--bg-3); border:1px solid {% if rec.type == 'danger' %}rgba(248,113,113,0.25){% elif rec.type == 'success' %}rgba(74,222,128,0.2){% elif rec.type == 'warning' %}rgba(251,191,36,0.2){% else %}rgba(96,165,250,0.2){% endif %}; border-radius:10px; padding:14px 16px; margin-bottom:10px; display:flex; gap:14px; align-items:flex-start;">
-        <div style="width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:4px; background:{% if rec.type == 'danger' %}var(--red){% elif rec.type == 'success' %}var(--green){% elif rec.type == 'warning' %}var(--amber){% else %}var(--blue){% endif %};"></div>
+
+    <!-- Мин. риск -->
+    <div style="background:var(--bg-2); border:1px solid rgba(74,222,128,0.2); border-radius:16px; padding:20px 22px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+            <div style="width:6px; height:6px; border-radius:50%; background:var(--green);"></div>
+            <div style="font-size:13px; font-weight:600; color:var(--text-1);">Рекомендации · Мин. риск</div>
+        </div>
+        {% for rec in minvol_recs %}
+        <div style="background:var(--bg-3); border:1px solid {% if rec.type == 'danger' %}rgba(248,113,113,0.25){% elif rec.type == 'success' %}rgba(74,222,128,0.2){% elif rec.type == 'warning' %}rgba(251,191,36,0.2){% else %}rgba(96,165,250,0.2){% endif %}; border-radius:8px; padding:12px 14px; margin-bottom:8px; display:flex; gap:10px; align-items:flex-start;">
+            <div style="width:7px; height:7px; border-radius:50%; flex-shrink:0; margin-top:4px; background:{% if rec.type == 'danger' %}var(--red){% elif rec.type == 'success' %}var(--green){% elif rec.type == 'warning' %}var(--amber){% else %}var(--blue){% endif %};"></div>
+            <div>
+                <div style="font-size:12px; font-weight:600; color:var(--text-1); margin-bottom:3px;">{{ rec.title }}</div>
+                <div style="font-size:12px; color:var(--text-3); line-height:1.6;">{{ rec.text }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+{% endif %}
+
+{% if rebalance_minvol %}
+<div style="background:var(--bg-2); border:1px solid rgba(74,222,128,0.15); border-radius:16px; overflow:hidden; margin-bottom:16px;">
+    <div style="padding:16px 22px; border-bottom:1px solid var(--border);">
+        <div style="font-size:14px; font-weight:600; color:var(--text-1);">План ребалансировки</div>
+        <div style="font-size:12px; color:var(--text-3); margin-top:3px;">Консервативная стратегия — минимальная волатильность портфеля</div>
+    </div>
+    <table style="width:100%; border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Актив</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Сейчас</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Цель</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Действие</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Сумма</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Акций</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in rebalance_minvol %}
+        <tr onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background=''">
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                <div style="font-size:13px; font-weight:500; color:var(--text-1);">{{ r.name }}</div>
+                <div style="font-family:var(--mono); font-size:11px; color:var(--text-3); margin-top:2px;">{{ r.ticker }} · ${{ r.price }}</div>
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                <div style="font-family:var(--mono); font-size:13px; color:var(--text-1);">{{ r.current_weight }}%</div>
+                <div style="font-size:11px; color:var(--text-3); margin-top:2px;">${{ r.current_val }}</div>
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                <div style="font-family:var(--mono); font-size:13px; color:var(--text-1);">{{ r.optimal_weight }}%</div>
+                <div style="font-size:11px; color:var(--text-3); margin-top:2px;">${{ r.optimal_val }}</div>
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                {% if r.action == 'buy' %}
+                    <span style="display:inline-flex; align-items:center; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--mono); background:var(--green-dim); color:var(--green); border:1px solid rgba(74,222,128,0.2);">↑ Докупить</span>
+                {% elif r.action == 'sell' %}
+                    <span style="display:inline-flex; align-items:center; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--mono); background:var(--red-dim); color:var(--red); border:1px solid rgba(248,113,113,0.2);">↓ Продать</span>
+                {% else %}
+                    <span style="display:inline-flex; align-items:center; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--mono); background:var(--bg-4); color:var(--text-3); border:1px solid var(--border);">— Держать</span>
+                {% endif %}
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                {% if r.action != 'hold' %}
+                    <div style="font-family:var(--mono); font-size:13px; font-weight:600; color:{% if r.action == 'buy' %}var(--green){% else %}var(--red){% endif %};">${{ r.diff_val }}</div>
+                    <div style="font-size:11px; color:var(--text-3); margin-top:2px;">{{ r.diff_weight }}% портфеля</div>
+                {% else %}
+                    <div style="font-family:var(--mono); font-size:13px; color:var(--text-3);">—</div>
+                {% endif %}
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                {% if r.action != 'hold' %}
+                    <div style="font-family:var(--mono); font-size:13px; color:var(--text-2);">{{ r.shares_diff }}</div>
+                {% else %}
+                    <div style="font-family:var(--mono); font-size:13px; color:var(--text-3);">—</div>
+                {% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <div style="padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:32px; flex-wrap:wrap;">
         <div>
-            <div style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:4px;">{{ rec.title }}</div>
-            <div style="font-size:13px; color:var(--text-2); line-height:1.6;">{{ rec.text }}</div>
+            <div style="font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">Итого докупить</div>
+            <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--green);">${{ total_to_buy_mv }}</div>
+        </div>
+        <div>
+            <div style="font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">Итого продать</div>
+            <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--red);">${{ total_to_sell_mv }}</div>
+        </div>
+        <div>
+            <div style="font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">Стоимость портфеля</div>
+            <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text-1);">${{ var_data.portfolio_value }}</div>
         </div>
     </div>
-    {% endfor %}
 </div>
 {% endif %}
 
@@ -230,6 +329,7 @@
                 <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Актив</th>
                 <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Тикер</th>
                 <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Реальная доходность</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">P&L</th>
                 <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Реальный риск</th>
                 <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Вес (Макс. Sharpe)</th>
                 <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Вес (Мин. риск)</th>
@@ -290,7 +390,11 @@
 <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:16px;">
     <div style="margin-bottom:20px;">
         <div style="font-size:14px; font-weight:600; color:var(--text-1);">Корреляционная матрица</div>
-        <div style="font-size:12px; color:var(--text-3); margin-top:3px;">Зелёный — активы движутся в разные стороны (лучшая диверсификация) · Красный — движутся вместе</div>
+        <div style="font-size:12px; color:var(--text-3); margin-top:3px;">
+            <span style="color:var(--red);">■</span> Красный (>0.7) — движутся синхронно, слабая диверсификация &nbsp;·&nbsp;
+            <span style="color:var(--text-3);">■</span> Серый (0.1–0.4) — слабая связь, нормально &nbsp;·&nbsp;
+            <span style="color:var(--green);">■</span> Зелёный (<0) — движутся в разные стороны, лучшая диверсификация
+        </div>
     </div>
     <div id="correlationHeatmap"></div>
 </div>
@@ -445,10 +549,17 @@ if (document.getElementById('monteCarloChart') && monteRisk.length > 0) {
 
 // ── Корреляционная матрица ─────────────────────────────────────────────────
 function corrColor(v) {
-    const o = Math.abs(v);
-    return v >= 0
-        ? `rgba(248,113,113,${0.12 + o * 0.65})`
-        : `rgba(74,222,128,${0.12 + o * 0.65})`;
+    if (v >= 0.7)  return 'rgba(248,113,113,0.75)';   // высокая — ярко красный
+    if (v >= 0.4)  return 'rgba(248,113,113,0.35)';   // средняя — бледно красный
+    if (v >= 0.1)  return 'rgba(160,160,171,0.20)';   // низкая — серый
+    if (v >= -0.3) return 'rgba(74,222,128,0.25)';    // слабо отрицательная — бледно зелёный
+    return 'rgba(74,222,128,0.65)';                   // сильно отрицательная — ярко зелёный
+}
+
+function corrTextColor(v) {
+    if (Math.abs(v) >= 0.7) return '#f1f1f3';
+    if (Math.abs(v) >= 0.4) return '#e0e0e5';
+    return '#a0a0ab';
 }
 
 (function renderHeatmap() {
@@ -474,7 +585,7 @@ function corrColor(v) {
 
         row.forEach(v => {
             const cell = document.createElement('div');
-            cell.style.cssText = `padding:10px 4px; border-radius:6px; text-align:center; font-family:var(--mono); font-size:12px; font-weight:500; background:${corrColor(v)}; color:${Math.abs(v) > 0.5 ? '#f1f1f3' : '#a0a0ab'};`;
+            cell.style.cssText = `padding:10px 4px; border-radius:6px; text-align:center; font-family:var(--mono); font-size:12px; font-weight:500; background:${corrColor(v)}; color:${corrTextColor(v)};`;
             cell.innerText = v.toFixed(2);
             container.appendChild(cell);
         });

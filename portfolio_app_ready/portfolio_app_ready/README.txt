@@ -1,35 +1,26 @@
-ГОТОВЫЙ ПРОЕКТ: Portfolio Optimizer
+# Portfolio AI
 
-Как запустить на Windows:
+## Быстрый старт
 
-1. Распакуйте архив.
-2. Откройте PowerShell в папке проекта, где лежит manage.py.
-3. Установите зависимости:
-   pip install -r requirements.txt
+### 1. Установи PostgreSQL
+https://www.postgresql.org/download/windows/
 
-   python -m pip install -r requirements.txt
+### 2. Создай базу данных
+В pgAdmin выполни:
+```sql
+CREATE DATABASE portfolio_db;
+CREATE USER portfolio_user WITH PASSWORD 'твой_пароль';
+GRANT ALL PRIVILEGES ON DATABASE portfolio_db TO portfolio_user;
+GRANT ALL ON SCHEMA public TO portfolio_user;
+ALTER DATABASE portfolio_db OWNER TO portfolio_user;
+```
 
-4. Выполните миграции:
-python -m pip install yfinance
-   python manage.py makemigrations
-   py -m pip install scipy
-   python manage.py migrate
+### 3. Создай .env файл
+Скопируй `.env.example` в `.env` и заполни своими данными.
 
-5. Создайте пользователя:
-   python manage.py createsuperuser
+### 4. Запусти проект
+```bash
+py setup.py
+```
 
-6. Запустите сервер:
-   python manage.py runserver
-
-7. Откройте сайт:
-   http://127.0.0.1:8000/
-
-Если появится страница входа, войдите под логином и паролем суперпользователя.
-
-
-py -m pip install numpy pandas scipy yfinance
-
-ollama run llama3
-
-py -m pip install ollama
-
+Открой http://127.0.0.1:8000

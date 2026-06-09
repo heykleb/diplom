@@ -1,20 +1,6 @@
 {% extends 'core/base.html' %}
 {% block content %}
 
-{% if portfolios %}
-<div style="margin-bottom:16px;">
-    <label style="display:block; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Портфель</label>
-    <select name="portfolio_id" style="width:100%; background:var(--bg-3); border:1px solid var(--border); border-radius:8px; color:var(--text-1); font-family:var(--sans); font-size:13px; padding:9px 12px;">
-        <option value="">— Без портфеля (общий дашборд)</option>
-        {% for p in portfolios %}
-        <option value="{{ p.id }}" {% if selected_portfolio_id == p.id %}selected{% endif %}>
-            {{ p.name }} ({{ p.currency }})
-        </option>
-        {% endfor %}
-    </select>
-</div>
-{% endif %}
-
 <div class="page-header">
     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
         <div>
@@ -28,20 +14,35 @@
 <div class="card" style="margin-bottom:16px;">
     <div style="margin-bottom:16px;">
         <div style="font-size:13px; font-weight:500; color:var(--text-1); margin-bottom:4px;">Поиск инструмента</div>
-        <div style="font-size:12px; color:var(--text-3);">Введите название компании или тикер — система подтянет данные автоматически</div>
+        <div style="font-size:12px; color:var(--text-3);">Введите название компании или тикер — данные заполнятся автоматически</div>
     </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-        <input type="text" id="tickerSearch" placeholder="Apple, Tesla, AAPL, MSFT…">
-        <select id="tickerSelect">
-            <option value="">Выберите из результатов</option>
-        </select>
+    <div style="position:relative; margin-bottom:12px;">
+        <input type="text" id="tickerSearch" placeholder="Apple, Tesla, AAPL, MSFT…" autocomplete="off" style="width:100%; background:var(--bg-3); border:1px solid var(--border); border-radius:8px; color:var(--text-1); font-family:var(--sans); font-size:13px; padding:9px 12px;">
+        <div id="tickerDropdown" style="display:none; position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--bg-3); border:1px solid var(--border-md); border-radius:10px; overflow:hidden; z-index:300; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+            <div id="tickerResults"></div>
+        </div>
+    </div>
+    <div id="selectedTicker" style="display:none; background:var(--bg-3); border:1px solid rgba(74,222,128,0.2); border-radius:8px; padding:10px 14px; font-size:13px; color:var(--green);">
+        ✓ Выбран инструмент — данные загружены
     </div>
 </div>
 
 <div class="card">
+    {% if form.errors %}
+    <div style="background:var(--red-dim); border:1px solid rgba(248,113,113,0.2); border-radius:8px; padding:14px 16px; margin-bottom:16px;">
+        {% for field in form %}
+            {% for error in field.errors %}
+                <div style="font-size:13px; color:var(--red); margin-bottom:4px;"><strong>{{ field.label }}:</strong> {{ error }}</div>
+            {% endfor %}
+        {% endfor %}
+        {% for error in form.non_field_errors %}
+            <div style="font-size:13px; color:var(--red);">{{ error }}</div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     <form method="post">
         {% csrf_token %}
-
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
             <div>
                 <label class="form-label">Название актива</label>
@@ -60,84 +61,121 @@
                 {{ form.quantity }}
             </div>
         </div>
-
         <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:24px;">
             <div>
                 <label class="form-label">Текущая цена</label>
                 {{ form.current_price }}
             </div>
             <div>
-                <label class="form-label">Историческая доходность, %</label>
+                <label class="form-label">Доходность, %</label>
                 {{ form.expected_return }}
             </div>
             <div>
-                <label class="form-label">Исторический риск, %</label>
+                <label class="form-label">Риск, %</label>
                 {{ form.risk }}
             </div>
         </div>
-
         <div style="display:flex; gap:10px;">
             <button type="submit" class="btn-primary">Сохранить актив</button>
             <a href="{% url 'dashboard' %}" class="btn-ghost">Отмена</a>
         </div>
     </form>
-
-    {% if form.errors %}
-    <div style="background:var(--red-dim); border:1px solid rgba(248,113,113,0.2); border-radius:8px; padding:14px 16px; margin-bottom:16px;">
-        {% for field in form %}
-            {% for error in field.errors %}
-                <div style="font-size:13px; color:var(--red); margin-bottom:4px;">
-                    <strong>{{ field.label }}:</strong> {{ error }}
-                </div>
-            {% endfor %}
-        {% endfor %}
-        {% for error in form.non_field_errors %}
-            <div style="font-size:13px; color:var(--red);">{{ error }}</div>
-        {% endfor %}
-    </div>
-    {% endif %}
 </div>
 
 <script>
-const searchInput  = document.getElementById('tickerSearch');
-const tickerSelect = document.getElementById('tickerSelect');
-let timer = null;
+const tickerSearch   = document.getElementById('tickerSearch');
+const tickerDropdown = document.getElementById('tickerDropdown');
+const tickerResults  = document.getElementById('tickerResults');
+const selectedBadge  = document.getElementById('selectedTicker');
+let searchTimer = null;
 
-searchInput.addEventListener('input', function () {
-    clearTimeout(timer);
-    const query = this.value.trim();
-    if (query.length < 2) return;
-    timer = setTimeout(() => {
-        fetch(`/api/ticker-search/?q=${encodeURIComponent(query)}`)
+tickerSearch.addEventListener('input', function () {
+    clearTimeout(searchTimer);
+    const q = this.value.trim();
+
+    if (q.length < 2) {
+        tickerDropdown.style.display = 'none';
+        return;
+    }
+
+    searchTimer = setTimeout(() => {
+        fetch(`/api/ticker-search/?q=${encodeURIComponent(q)}`)
             .then(r => r.json())
             .then(data => {
-                tickerSelect.innerHTML = '<option value="">Выберите инструмент</option>';
-                data.results.forEach(item => {
-                    const opt = document.createElement('option');
-                    opt.value = item.symbol;
-                    opt.textContent = `${item.symbol} — ${item.name} (${item.type})`;
-                    tickerSelect.appendChild(opt);
-                });
+                if (!data.results || data.results.length === 0) {
+                    tickerResults.innerHTML = '<div style="padding:14px 16px; font-size:13px; color:var(--text-3);">Ничего не найдено</div>';
+                } else {
+                    tickerResults.innerHTML = data.results.map(item => `
+                        <div onclick="selectTicker('${item.symbol}')"
+                            style="display:flex; align-items:center; justify-content:space-between; padding:11px 16px; cursor:pointer; border-bottom:1px solid var(--border); transition:background 0.1s;"
+                            onmouseover="this.style.background='var(--bg-4)'"
+                            onmouseout="this.style.background=''">
+                            <div style="display:flex; align-items:center; gap:10px;">
+                                <span style="font-family:var(--mono); font-size:11px; color:var(--blue); padding:2px 7px; background:var(--blue-dim); border-radius:4px; border:1px solid rgba(96,165,250,0.15);">${item.symbol}</span>
+                                <div>
+                                    <div style="font-size:13px; color:var(--text-1); font-weight:500;">${item.name || item.symbol}</div>
+                                    <div style="font-size:11px; color:var(--text-3); margin-top:1px;">${item.type}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                tickerDropdown.style.display = 'block';
             })
-            .catch(console.error);
-    }, 500);
+            .catch(err => {
+                console.error('Search error:', err);
+                tickerDropdown.style.display = 'none';
+            });
+    }, 400);
 });
 
-tickerSelect.addEventListener('change', function () {
-    const symbol = this.value;
-    if (!symbol) return;
+function selectTicker(symbol) {
+    tickerDropdown.style.display = 'none';
+    tickerSearch.value = symbol;
+    selectedBadge.style.display = 'none';
+    selectedBadge.innerText = '⏳ Загрузка данных…';
+    selectedBadge.style.color = 'var(--text-3)';
+    selectedBadge.style.display = 'block';
+
     fetch(`/api/ticker-info/?symbol=${encodeURIComponent(symbol)}`)
         .then(r => r.json())
         .then(data => {
-            document.getElementById('id_name').value          = data.name;
-            document.getElementById('id_ticker').value        = data.symbol;
-            document.getElementById('id_current_price').value = data.price;
-            document.getElementById('id_expected_return').value = data.expected_return.toFixed(2);
-            document.getElementById('id_risk').value          = data.risk.toFixed(2);
+            if (data.error) {
+                selectedBadge.innerText = '✗ Ошибка загрузки данных';
+                selectedBadge.style.color = 'var(--red)';
+                return;
+            }
+            document.getElementById('id_name').value            = data.name || symbol;
+            document.getElementById('id_ticker').value          = data.symbol || symbol;
+            document.getElementById('id_current_price').value   = data.price || 0;
+            document.getElementById('id_expected_return').value = (data.expected_return || 0).toFixed(2);
+            document.getElementById('id_risk').value            = (data.risk || 0).toFixed(2);
+
             const t = document.getElementById('id_asset_type');
-            t.value = data.type === 'ETF' ? 'etf' : data.type === 'CRYPTOCURRENCY' ? 'crypto' : 'stock';
+            if (data.type === 'ETF') t.value = 'etf';
+            else if (data.type === 'CRYPTOCURRENCY') t.value = 'crypto';
+            else t.value = 'stock';
+
+            selectedBadge.innerText = `✓ ${data.name || symbol} — данные загружены`;
+            selectedBadge.style.color = 'var(--green)';
         })
-        .catch(console.error);
+        .catch(err => {
+            console.error('Info error:', err);
+            selectedBadge.innerText = '✗ Ошибка соединения';
+            selectedBadge.style.color = 'var(--red)';
+        });
+}
+
+document.addEventListener('click', function (e) {
+    if (!tickerSearch.contains(e.target) && !tickerDropdown.contains(e.target)) {
+        tickerDropdown.style.display = 'none';
+    }
+});
+
+tickerSearch.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+        tickerDropdown.style.display = 'none';
+    }
 });
 </script>
 

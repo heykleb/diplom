@@ -183,9 +183,10 @@
             padding: 7px 14px;
             color: var(--text-1);
             font-family: var(--sans); font-size: 13px;
-            width: 280px;
+            width: 100%;
             transition: border-color 0.15s;
         }
+
         .topbar-search::placeholder { color: var(--text-3); }
         .topbar-search:focus { outline: none; border-color: var(--border-md); }
 
@@ -476,18 +477,18 @@
 <body>
 
 <div class="sidebar">
-    <div class="sidebar-logo">
-        <div class="sidebar-logo-icon">P</div>
+    <a href="{% url 'dashboard' %}" class="sidebar-logo" style="text-decoration:none;">
+        <img src="https://img.magnific.com/free-vector/hand-colorful-gradient-style-vector-design_474888-2633.jpg?semt=ais_hybrid&w=740&q=80" 
+            style="width:36px; height:36px; border-radius:8px; object-fit:cover; flex-shrink:0;">
         <div>
             <div class="sidebar-logo-name">Portfolio AI</div>
             <div class="sidebar-logo-sub">optimizer</div>
         </div>
-    </div>
+    </a>
 
     <div class="sidebar-balance">
         <div class="sidebar-balance-label">Общий баланс</div>
         <div class="sidebar-balance-value">{{ sidebar_total_amount }} $</div>
-        <div class="sidebar-balance-ret">↑ +{{ sidebar_portfolio_return }}%</div>
     </div>
 
     <div class="nav-group">
@@ -497,6 +498,9 @@
         </a>
         <a href="{% url 'asset_create' %}" class="menu-item {% if '/assets/add/' in request.path %}active-menu{% endif %}">
             <span class="nav-icon">+</span> Добавить актив
+        </a>
+        <a href="{% url 'all_transactions' %}" class="menu-item {% if '/transactions/' in request.path %}active-menu{% endif %}">
+            <span class="nav-icon">↕</span> Транзакции
         </a>
         <a href="{% url 'optimizer' %}" class="menu-item {% if '/optimizer/' in request.path %}active-menu{% endif %}">
             <span class="nav-icon">⌀</span> Оптимизация
@@ -517,24 +521,129 @@
     </div>
 
     <div class="sidebar-user">
-        <div class="user-avatar">P</div>
+        <div class="user-avatar">
+            {{ request.user.username|first|upper }}
+        </div>
         <div>
-            <div class="user-name">Portfolio Manager</div>
-            <div class="user-role">investor</div>
+            <div class="user-name">{{ request.user.username }}</div>
+            <div class="user-role">{{ request.user.email }}</div>
         </div>
     </div>
 </div>
 
 <div class="content">
     <div class="topbar">
-        <input type="text" class="topbar-search" placeholder="Поиск тикеров, активов, ETF…">
+        <div style="position:relative; flex:1; margin-right:16px;">
+            <input type="text" id="globalSearch" class="topbar-search" placeholder="Поиск активов, компаний, тикеров…" autocomplete="off">
+            <div id="searchDropdown" style="display:none; position:absolute; top:calc(100% + 6px); left:0; right:0; background:var(--bg-3); border:1px solid var(--border-md); border-radius:10px; overflow:hidden; z-index:200; box-shadow:0 8px 24px rgba(0,0,0,0.4);">
+                <div id="searchResults"></div>
+            </div>
+        </div>
         <div class="topbar-right">
             <div class="topbar-user">
-                <span class="topbar-user-name">Инвестор</span>
-                <div class="topbar-avatar">P</div>
+                <span class="topbar-user-name">{{ request.user.username }}</span>
+                <div class="topbar-avatar">{{ request.user.username|first|upper }}</div>
             </div>
         </div>
     </div>
+
+    <script>
+    const input    = document.getElementById('globalSearch');
+    const dropdown = document.getElementById('searchDropdown');
+    const results  = document.getElementById('searchResults');
+    let timer      = null;
+
+    input.addEventListener('input', function () {
+        clearTimeout(timer);
+        const q = this.value.trim();
+
+        if (q.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        results.innerHTML = '<div style="padding:14px 16px; font-size:12px; color:var(--text-3);">Поиск…</div>';
+        dropdown.style.display = 'block';
+
+        timer = setTimeout(() => {
+            fetch(`/api/ticker-search/?q=${encodeURIComponent(q)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.results || data.results.length === 0) {
+                        results.innerHTML = `
+                            <div style="padding:20px 16px; text-align:center;">
+                                <div style="font-size:13px; color:var(--text-3);">Ничего не найдено по «${q}»</div>
+                            </div>`;
+                    } else {
+                        results.innerHTML = data.results.map(item => `
+                            <div onclick="goToAsset('${item.symbol}')"
+                                style="display:flex; align-items:center; justify-content:space-between; padding:11px 16px; cursor:pointer; border-bottom:1px solid var(--border); transition:background 0.1s;"
+                                onmouseover="this.style.background='var(--bg-4)'"
+                                onmouseout="this.style.background=''">
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <span style="font-family:var(--mono); font-size:11px; color:var(--blue); padding:2px 7px; background:var(--blue-dim); border-radius:4px; border:1px solid rgba(96,165,250,0.15); flex-shrink:0;">${item.symbol}</span>
+                                    <div>
+                                        <div style="font-size:13px; color:var(--text-1); font-weight:500;">${item.name || item.symbol}</div>
+                                        <div style="font-size:11px; color:var(--text-3); margin-top:1px;">${item.type}</div>
+                                    </div>
+                                </div>
+                                <div style="flex-shrink:0;">
+                                    <div style="font-size:11px; color:var(--text-3); font-family:var(--mono);">↗ открыть</div>
+                                </div>
+                            </div>
+                        `).join('') + `
+                            <div style="padding:10px 16px; border-top:1px solid var(--border);">
+                                <a href="/assets/add/" style="font-size:12px; color:var(--blue); text-decoration:none;">+ Добавить в портфель</a>
+                            </div>`;
+                    }
+                    dropdown.style.display = 'block';
+                })
+                .catch(() => {
+                    dropdown.style.display = 'none';
+                });
+        }, 400);
+    });
+
+    function goToAsset(symbol) {
+        dropdown.style.display = 'none';
+        input.value = '';
+
+        // Ищем актив в портфеле пользователя
+        fetch(`/api/assets-search/?q=${encodeURIComponent(symbol)}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.assets && data.assets.length > 0) {
+                    // Актив есть в портфеле — открываем его страницу
+                    window.location.href = `/asset/${data.assets[0].id}/`;
+                } else {
+                    // Актива нет — предлагаем добавить
+                    window.location.href = `/assets/add/`;
+                }
+            })
+            .catch(() => {
+                window.location.href = `/assets/add/`;
+            });
+    }
+
+    document.addEventListener('click', function (e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+            input.value = '';
+        }
+    });
+
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') {
+            dropdown.style.display = 'none';
+            input.value = '';
+            input.blur();
+        }
+        if (e.key === 'Enter') {
+            const first = results.querySelector('[onclick]');
+            if (first) first.click();
+        }
+    });
+    </script>
 
     <div class="page-body">
         {% block content %}{% endblock %}

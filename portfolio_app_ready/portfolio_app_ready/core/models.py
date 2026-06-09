@@ -79,12 +79,36 @@ class Asset(models.Model):
             return 0
         return round((self.pnl / self.total_cost) * 100, 2)
 
+    @property
+    def real_pnl_percent(self):
+        cost = float(self.avg_buy_price or 0)
+        if cost == 0:
+            # Если нет цены покупки — считаем от total_cost
+            total_cost = float(self.quantity) * cost
+            if total_cost == 0:
+                return 0
+        return round(
+            (float(self.current_price) - float(self.avg_buy_price))
+            / float(self.avg_buy_price) * 100, 2
+        ) if float(self.avg_buy_price) > 0 else round(
+            (float(self.amount) - float(self.total_cost)) / float(self.total_cost) * 100, 2
+        ) if float(self.total_cost) > 0 else 0
+
+    @property
+    def real_pnl(self):
+        return round(
+            (float(self.current_price) - float(self.avg_buy_price))
+            * float(self.quantity), 2
+        )
+
     def __str__(self):
         return f'{self.name} ({self.ticker})'
 
     class Meta:
         verbose_name        = 'Актив'
         verbose_name_plural = 'Активы'
+
+    
 
 
 class Transaction(models.Model):
@@ -97,7 +121,9 @@ class Transaction(models.Model):
     ]
 
     owner      = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='Пользователь')
-    asset      = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name='transactions', verbose_name='Актив', null=True, blank=True)
+    asset      = models.ForeignKey(Asset, on_delete=models.SET_NULL, related_name='transactions', verbose_name='Актив', null=True, blank=True)
+    asset_ticker = models.CharField(max_length=30, blank=True, default='', verbose_name='Тикер актива')
+    asset_name   = models.CharField(max_length=100, blank=True, default='', verbose_name='Название актива')
     tx_type    = models.CharField(max_length=20, choices=TRANSACTION_TYPES, verbose_name='Тип операции')
     quantity   = models.FloatField(default=0, verbose_name='Количество')
     price      = models.DecimalField(max_digits=12, decimal_places=2, verbose_name='Цена')
@@ -108,6 +134,11 @@ class Transaction(models.Model):
 
     def save(self, *args, **kwargs):
         self.total = round(float(self.quantity) * float(self.price), 2)
+        # Сохраняем тикер и имя при создании
+        if self.asset and not self.asset_ticker:
+            self.asset_ticker = self.asset.ticker
+        if self.asset and not self.asset_name:
+            self.asset_name = self.asset.name
         super().save(*args, **kwargs)
 
     def __str__(self):

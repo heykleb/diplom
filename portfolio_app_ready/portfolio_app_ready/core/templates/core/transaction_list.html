@@ -1,0 +1,58 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px;">
+    <div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--text-3); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em;">{{ asset.ticker }} · История</div>
+        <div style="font-size:20px; font-weight:600; color:var(--text-1); letter-spacing:-0.025em;">Транзакции</div>
+    </div>
+    <div style="display:flex; gap:8px;">
+        <a href="{% url 'transaction_create' asset.id %}" style="display:inline-flex; align-items:center; background:var(--text-1); color:var(--bg); border:none; border-radius:8px; padding:8px 16px; font-size:13px; font-weight:500; text-decoration:none;">+ Добавить</a>
+        <a href="{% url 'asset_detail' asset.id %}" style="display:inline-flex; align-items:center; background:transparent; color:var(--text-2); border:1px solid var(--border-md); border-radius:8px; padding:8px 16px; font-size:13px; text-decoration:none;">← Назад</a>
+    </div>
+</div>
+
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; overflow:hidden;">
+    <table style="width:100%; border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Дата</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Тип</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Количество</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Цена</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Сумма</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Комиссия</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Заметка</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for tx in transactions %}
+        <tr onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background=''">
+            <td style="padding:14px 22px; font-family:var(--mono); font-size:12px; color:var(--text-3); border-bottom:1px solid var(--border);">{{ tx.created_at|date:"d.m.Y H:i" }}</td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                {% if tx.tx_type == 'buy' %}
+                    <span style="display:inline-flex; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; font-family:var(--mono); background:var(--green-dim); color:var(--green); border:1px solid rgba(74,222,128,0.2);">Покупка</span>
+                {% elif tx.tx_type == 'sell' %}
+                    <span style="display:inline-flex; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; font-family:var(--mono); background:var(--red-dim); color:var(--red); border:1px solid rgba(248,113,113,0.2);">Продажа</span>
+                {% elif tx.tx_type == 'dividend' %}
+                    <span style="display:inline-flex; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; font-family:var(--mono); background:var(--blue-dim); color:var(--blue); border:1px solid rgba(96,165,250,0.2);">Дивиденд</span>
+                {% else %}
+                    <span style="display:inline-flex; padding:3px 10px; border-radius:20px; font-size:11px; font-weight:500; font-family:var(--mono); background:var(--amber-dim); color:var(--amber); border:1px solid rgba(251,191,36,0.2);">{{ tx.get_tx_type_display }}</span>
+                {% endif %}
+            </td>
+            <td style="padding:14px 22px; font-family:var(--mono); font-size:13px; color:var(--text-1); border-bottom:1px solid var(--border);">{{ tx.quantity }}</td>
+            <td style="padding:14px 22px; font-family:var(--mono); font-size:13px; color:var(--text-1); border-bottom:1px solid var(--border);">{{ tx.price }} $</td>
+            <td style="padding:14px 22px; font-family:var(--mono); font-size:13px; color:var(--text-1); border-bottom:1px solid var(--border);">{{ tx.total }} $</td>
+            <td style="padding:14px 22px; font-family:var(--mono); font-size:13px; color:var(--text-3); border-bottom:1px solid var(--border);">{{ tx.commission }} $</td>
+            <td style="padding:14px 22px; font-size:12px; color:var(--text-3); border-bottom:1px solid var(--border);">{{ tx.note|default:"—" }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="7" style="text-align:center; color:var(--text-3); padding:48px 22px; font-size:13px;">Транзакций пока нет</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% endblock %}

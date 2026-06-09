@@ -1,209 +1,168 @@
 {% extends 'core/base.html' %}
-
 {% block content %}
 
-<div class="chart-card">
-
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:26px;">
-
+<div class="page-header">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
         <div>
-            <h2 style="font-weight:700;">
-                {{ asset.name }}
-            </h2>
-
-            <div style="color:#94A3B8;font-size:16px;">
-                {{ asset.ticker }} • Детальная карточка актива
+            <div style="font-family:var(--mono); font-size:11px; color:var(--text-3); margin-bottom:6px; text-transform:uppercase; letter-spacing:0.06em;">
+                {{ asset.ticker }} · Детальная карточка
             </div>
+            <div class="page-title">{{ asset.name }}</div>
         </div>
-
-        <a href="{% url 'dashboard' %}" class="btn-main text-decoration-none">
-            Назад к портфелю
-        </a>
-
+        <a href="{% url 'dashboard' %}" class="btn-ghost">← Портфель</a>
     </div>
+</div>
 
-    <div class="dashboard-grid">
-
-        <div class="card-box">
-            <div class="card-title">Текущая цена</div>
-            <div class="card-value" id="livePrice">
-                {{ asset.current_price }} $
-            </div>
-        </div>
-
-        <div class="card-box">
-            <div class="card-title">Изменение</div>
-            <div class="card-value" id="priceChange">
-                —
-            </div>
-        </div>
-
-        <div class="card-box">
-            <div class="card-title">Количество</div>
-            <div class="card-value">
-                {{ asset.quantity }}
-            </div>
-        </div>
-
-        <div class="card-box">
-            <div class="card-title">Стоимость позиции</div>
-            <div class="card-value" id="positionAmount">
-                {{ asset.amount }} $
-            </div>
-        </div>
-
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-label">Текущая цена</div>
+        <div class="stat-value" id="livePrice">{{ asset.current_price }} $</div>
     </div>
-
+    <div class="stat-card">
+        <div class="stat-label">Изменение</div>
+        <div class="stat-value" id="priceChange">—</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Количество</div>
+        <div class="stat-value" style="font-size:22px;">{{ asset.quantity }}</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Стоимость позиции</div>
+        <div class="stat-value" id="positionAmount">{{ asset.amount }} $</div>
+    </div>
 </div>
 
 <div class="chart-card">
-
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
-
+    <div class="chart-card-header">
         <div>
-            <h3 style="font-weight:700;">
-                История изменения цены
-            </h3>
-
-            <div style="color:#94A3B8;">
-                Динамика закрытия цены по выбранному периоду
-            </div>
+            <div class="chart-card-title">История цены</div>
+            <div class="chart-card-sub">Динамика закрытия по выбранному периоду</div>
         </div>
-
-        <div style="display:flex;gap:10px;">
-
-            <button class="period-btn" data-period="5d">5 дней</button>
-            <button class="period-btn" data-period="1mo">1 месяц</button>
-            <button class="period-btn" data-period="6mo">6 месяцев</button>
-            <button class="period-btn" data-period="1y">1 год</button>
-
+        <div style="display:flex; gap:6px;">
+            <button class="period-btn" data-period="5d">5д</button>
+            <button class="period-btn" data-period="1mo">1м</button>
+            <button class="period-btn" data-period="6mo">6м</button>
+            <button class="period-btn" data-period="1y">1г</button>
         </div>
-
     </div>
-
-    <canvas id="assetChart" height="100"></canvas>
-
+    <canvas id="assetChart" height="90"></canvas>
 </div>
 
 <div class="ai-box">
-
-    <h3 style="font-weight:700;">
-        🤖 Аналитика по активу
-    </h3>
-
-    <div class="ai-item">
-        Система автоматически обновляет текущую цену и пересчитывает стоимость позиции.
-    </div>
-
-    <div class="ai-item">
-        Исторический график позволяет оценить динамику инструмента и возможную волатильность.
-    </div>
-
+    <div class="ai-box-title"><span class="ai-dot"></span> Аналитика</div>
+    <div class="ai-item">Система автоматически обновляет текущую цену и пересчитывает стоимость позиции каждые 15 секунд.</div>
+    <div class="ai-item">Исторический график позволяет оценить динамику инструмента и возможную волатильность.</div>
 </div>
 
-<style>
-    .period-btn{
-        background:#1E293B;
-        color:#CBD5E1;
-        border:1px solid #334155;
-        padding:10px 14px;
-        border-radius:12px;
-    }
-
-    .period-btn:hover{
-        background:#2563EB;
-        color:white;
-    }
-</style>
-
 <script>
-    let assetChart = null;
+let assetChart = null;
 
-    function loadHistory(period = '1mo') {
-        fetch(`/api/asset/{{ asset.id }}/history/?period=${period}`)
-            .then(response => response.json())
-            .then(data => {
-                const ctx = document.getElementById('assetChart');
+function loadHistory(period = '1mo') {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector(`.period-btn[data-period="${period}"]`)?.classList.add('active');
 
-                if (assetChart) {
-                    assetChart.destroy();
-                }
-
-                assetChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: data.labels,
-                        datasets: [{
-                            label: `Цена ${data.ticker}`,
-                            data: data.prices,
-                            tension: 0.4,
-                            fill: true
-                        }]
-                    },
-                    options: {
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: '#E2E8F0'
-                                }
-                            }
-                        },
-                        scales: {
-                            x: {
-                                ticks: {
-                                    color: '#94A3B8'
-                                },
-                                grid: {
-                                    color: '#1E293B'
-                                }
-                            },
-                            y: {
-                                ticks: {
-                                    color: '#94A3B8'
-                                },
-                                grid: {
-                                    color: '#1E293B'
-                                }
-                            }
-                        }
+    fetch(`/api/asset/{{ asset.id }}/history/?period=${period}`)
+        .then(r => r.json())
+        .then(data => {
+            if (assetChart) assetChart.destroy();
+            const ctx = document.getElementById('assetChart');
+            assetChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: `Цена ${data.ticker}`,
+                        data: data.prices,
+                        tension: 0.4,
+                        fill: true,
+                        borderColor: 'rgba(96,165,250,0.9)',
+                        borderWidth: 2,
+                        backgroundColor: 'rgba(96,165,250,0.07)',
+                        pointRadius: 2, pointHoverRadius: 5
+                    }]
+                },
+                options: {
+                    plugins: { legend: { labels: { color: '#60606e', font: { size: 12 } } } },
+                    scales: {
+                        x: { ticks: { color: '#60606e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                        y: { ticks: { color: '#60606e', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } }
                     }
-                });
-            });
-    }
-
-    function updateLivePrice() {
-        fetch(`/api/asset/{{ asset.id }}/price/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) return;
-
-                document.getElementById('livePrice').innerText = data.price + ' $';
-                document.getElementById('positionAmount').innerText = data.amount + ' $';
-
-                const changeBlock = document.getElementById('priceChange');
-
-                if (data.change >= 0) {
-                    changeBlock.innerText = '+' + data.change + ' $ / +' + data.change_percent + '%';
-                    changeBlock.classList.remove('red');
-                    changeBlock.classList.add('green');
-                } else {
-                    changeBlock.innerText = data.change + ' $ / ' + data.change_percent + '%';
-                    changeBlock.classList.remove('green');
-                    changeBlock.classList.add('red');
                 }
             });
-    }
-
-    document.querySelectorAll('.period-btn').forEach(button => {
-        button.addEventListener('click', function () {
-            loadHistory(this.dataset.period);
         });
-    });
+}
 
-    loadHistory('1mo');
-    updateLivePrice();
+function updateLivePrice() {
+    fetch(`/api/asset/{{ asset.id }}/price/`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) return;
+            document.getElementById('livePrice').innerText = data.price + ' $';
+            document.getElementById('positionAmount').innerText = data.amount + ' $';
+            const el = document.getElementById('priceChange');
+            if (data.change >= 0) {
+                el.innerText = '+' + data.change + ' $ / +' + data.change_percent + '%';
+                el.className = 'stat-value green';
+            } else {
+                el.innerText = data.change + ' $ / ' + data.change_percent + '%';
+                el.className = 'stat-value red';
+            }
+        });
+}
 
-    setInterval(updateLivePrice, 15000);
+document.querySelectorAll('.period-btn').forEach(b => {
+    b.addEventListener('click', () => loadHistory(b.dataset.period));
+});
+
+loadHistory('1mo');
+updateLivePrice();
+setInterval(updateLivePrice, 15000);
 </script>
 
+
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-top:16px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 22px; border-bottom:1px solid var(--border);">
+        <div style="font-size:14px; font-weight:600; color:var(--text-1);">Последние транзакции</div>
+        <a href="{% url 'transaction_create' asset.id %}" style="display:inline-flex; align-items:center; background:var(--text-1); color:var(--bg); border:none; border-radius:8px; padding:7px 14px; font-size:12px; font-weight:500; text-decoration:none;">+ Добавить</a>
+    </div>
+    <table style="width:100%; border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th style="text-align:left; padding:10px 22px; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Дата</th>
+                <th style="text-align:left; padding:10px 22px; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Тип</th>
+                <th style="text-align:left; padding:10px 22px; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Кол-во</th>
+                <th style="text-align:left; padding:10px 22px; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Цена</th>
+                <th style="text-align:left; padding:10px 22px; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Сумма</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for tx in transactions %}
+        <tr onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background=''">
+            <td style="padding:12px 22px; font-family:var(--mono); font-size:11px; color:var(--text-3); border-bottom:1px solid var(--border);">{{ tx.created_at|date:"d.m.Y" }}</td>
+            <td style="padding:12px 22px; border-bottom:1px solid var(--border);">
+                {% if tx.tx_type == 'buy' %}
+                    <span style="font-family:var(--mono); font-size:11px; color:var(--green);">Покупка</span>
+                {% elif tx.tx_type == 'sell' %}
+                    <span style="font-family:var(--mono); font-size:11px; color:var(--red);">Продажа</span>
+                {% else %}
+                    <span style="font-family:var(--mono); font-size:11px; color:var(--text-3);">{{ tx.get_tx_type_display }}</span>
+                {% endif %}
+            </td>
+            <td style="padding:12px 22px; font-family:var(--mono); font-size:12px; color:var(--text-1); border-bottom:1px solid var(--border);">{{ tx.quantity }}</td>
+            <td style="padding:12px 22px; font-family:var(--mono); font-size:12px; color:var(--text-1); border-bottom:1px solid var(--border);">{{ tx.price }} $</td>
+            <td style="padding:12px 22px; font-family:var(--mono); font-size:12px; color:var(--text-1); border-bottom:1px solid var(--border);">{{ tx.total }} $</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="text-align:center; color:var(--text-3); padding:32px; font-size:13px;">Транзакций пока нет</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% if transactions %}
+    <div style="padding:12px 22px; border-top:1px solid var(--border);">
+        <a href="{% url 'transaction_list' asset.id %}" style="font-size:12px; color:var(--blue); text-decoration:none;">Все транзакции →</a>
+    </div>
+    {% endif %}
+</div>
 {% endblock %}

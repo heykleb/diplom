@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход — Portfolio AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        :root {
+            --bg: #09090b; --bg-2: #0f0f12; --bg-3: #141418;
+            --border: rgba(255,255,255,0.06); --border-md: rgba(255,255,255,0.10);
+            --text-1: #f1f1f3; --text-2: #a0a0ab; --text-3: #60606e;
+            --green: #4ade80; --blue: #60a5fa; --red: #f87171;
+            --mono: 'JetBrains Mono', monospace;
+            --sans: 'Inter', -apple-system, sans-serif;
+        }
+        body {
+            background: var(--bg); color: var(--text-1);
+            font-family: var(--sans); font-size: 14px;
+            min-height: 100vh; display: flex;
+            align-items: center; justify-content: center;
+            -webkit-font-smoothing: antialiased;
+        }
+        .wrap {
+            width: 100%; max-width: 400px; padding: 0 24px;
+        }
+        .logo {
+            display: flex; align-items: center; gap: 10px;
+            justify-content: center; margin-bottom: 36px;
+        }
+        .logo-icon {
+            width: 36px; height: 36px; border-radius: 10px;
+            background: var(--blue); display: flex;
+            align-items: center; justify-content: center;
+            font-family: var(--mono); font-size: 15px;
+            font-weight: 600; color: var(--bg);
+        }
+        .logo-name {
+            font-size: 16px; font-weight: 600;
+            color: var(--text-1); letter-spacing: -0.02em;
+        }
+        .logo-sub {
+            font-size: 11px; color: var(--text-3);
+            font-family: var(--mono);
+        }
+        .card {
+            background: var(--bg-2); border: 1px solid var(--border);
+            border-radius: 16px; padding: 28px;
+        }
+        .card-title {
+            font-size: 18px; font-weight: 600;
+            color: var(--text-1); letter-spacing: -0.025em;
+            margin-bottom: 6px;
+        }
+        .card-sub {
+            font-size: 13px; color: var(--text-3); margin-bottom: 24px;
+        }
+        .field { margin-bottom: 16px; }
+        .field label {
+            display: block; font-size: 11px; color: var(--text-3);
+            font-family: var(--mono); text-transform: uppercase;
+            letter-spacing: 0.06em; margin-bottom: 6px;
+        }
+        .field input {
+            width: 100%; background: var(--bg-3);
+            border: 1px solid var(--border);
+            border-radius: 8px; color: var(--text-1);
+            font-family: var(--sans); font-size: 13px;
+            padding: 10px 14px; transition: border-color 0.15s;
+        }
+        .field input:focus { outline: none; border-color: var(--border-md); }
+        .field input::placeholder { color: var(--text-3); }
+        .btn {
+            width: 100%; background: var(--text-1); color: var(--bg);
+            border: none; border-radius: 8px; padding: 11px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: background 0.15s; margin-top: 8px;
+        }
+        .btn:hover { background: #d4d4d8; }
+        .errors {
+            background: rgba(248,113,113,0.08);
+            border: 1px solid rgba(248,113,113,0.2);
+            border-radius: 8px; padding: 10px 14px;
+            margin-bottom: 16px;
+        }
+        .errors p {
+            font-size: 12px; color: var(--red); margin-bottom: 2px;
+        }
+        .errors p:last-child { margin-bottom: 0; }
+        .footer-link {
+            text-align: center; margin-top: 20px;
+            font-size: 13px; color: var(--text-3);
+        }
+        .footer-link a { color: var(--blue); text-decoration: none; }
+        .footer-link a:hover { text-decoration: underline; }
+        .divider {
+            height: 1px; background: var(--border);
+            margin: 20px 0; position: relative;
+        }
+        .divider span {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--bg-2); padding: 0 10px;
+            font-size: 11px; color: var(--text-3);
+            font-family: var(--mono);
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="logo">
+        <div class="logo-icon">P</div>
+        <div>
+            <div class="logo-name">Portfolio AI</div>
+            <div class="logo-sub">optimizer</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Добро пожаловать</div>
+        <div class="card-sub">Войдите в свой аккаунт</div>
+
+        {% if form.errors %}
+        <div class="errors">
+            {% for field in form %}
+                {% for error in field.errors %}
+                    <p>{{ error }}</p>
+                {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="field">
+                <label>Имя пользователя</label>
+                {{ form.username }}
+            </div>
+            <div class="field">
+                <label>Пароль</label>
+                {{ form.password }}
+            </div>
+            <button type="submit" class="btn">Войти</button>
+        </form>
+
+        <div class="divider"><span>или</span></div>
+
+        <div class="footer-link">
+            Нет аккаунта? <a href="{% url 'register' %}">Зарегистрироваться</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

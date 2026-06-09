@@ -1,381 +1,485 @@
 {% extends 'core/base.html' %}
-
 {% block content %}
 
-<div class="chart-card">
-
-    <h2 style="font-weight:700;">
-        📈 Оптимизация портфеля по модели Марковица
-    </h2>
-
-    <div style="color:#94A3B8;margin-bottom:24px;">
-        Расчет оптимальных долей активов на основе исторической доходности, риска и ковариационной матрицы.
+<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px;">
+    <div>
+        <div style="font-size:20px; font-weight:600; color:var(--text-1); letter-spacing:-0.025em;">Оптимизация портфеля</div>
+        <div style="font-size:13px; color:var(--text-3); margin-top:4px;">Модель Марковица · реальные исторические данные · план ребалансировки</div>
     </div>
+</div>
 
-    {% if error %}
-        <div class="ai-item" style="color:#EF4444;">
-            {{ error }}
-        </div>
-    {% endif %}
-
-    <form method="get" style="margin-top:20px;">
+<!-- Форма параметров -->
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:16px;">
+    <div style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:16px;">Параметры расчёта</div>
+    <form method="get" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap;">
         <input type="hidden" name="run" value="1">
-        <div class="row">
-            <div class="col-md-4">
-                <label class="form-label">Безрисковая ставка, %</label>
-                <input type="number" step="0.1" name="risk_free" value="{{ risk_free_rate }}" class="search w-100">
-            </div>
 
-            <div class="col-md-3 d-flex align-items-end">
-                <button class="btn-main w-100">
-                    Рассчитать оптимальный портфель
-                </button>
-            </div>
+        <div style="flex:1; min-width:180px;">
+            <label style="display:block; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Безрисковая ставка</label>
+            <select name="risk_free" style="width:100%; background:var(--bg-3); border:1px solid var(--border); border-radius:8px; color:var(--text-1); font-family:var(--sans); font-size:13px; padding:9px 12px;">
+                <option value="4.5"  {% if risk_free_rate == 4.5  %}selected{% endif %}>🇺🇸 США — 4.5% (трежерис)</option>
+                <option value="16.0" {% if risk_free_rate == 16.0 %}selected{% endif %}>🇷🇺 Россия — 16% (ОФЗ)</option>
+                <option value="2.5"  {% if risk_free_rate == 2.5  %}selected{% endif %}>🇪🇺 Европа — 2.5% (бунды)</option>
+                <option value="5.0"  {% if risk_free_rate == 5.0  %}selected{% endif %}>🌍 По умолчанию — 5%</option>
+                <option value="0.0"  {% if risk_free_rate == 0.0  %}selected{% endif %}>Без ставки — 0%</option>
+            </select>
         </div>
+
+        <div style="flex:1; min-width:160px;">
+            <label style="display:block; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Период данных</label>
+            <select name="period" style="width:100%; background:var(--bg-3); border:1px solid var(--border); border-radius:8px; color:var(--text-1); font-family:var(--sans); font-size:13px; padding:9px 12px;">
+                <option value="180"  {% if period == 180  %}selected{% endif %}>6 месяцев</option>
+                <option value="365"  {% if period == 365  %}selected{% endif %}>1 год</option>
+                <option value="730"  {% if period == 730  %}selected{% endif %}>2 года</option>
+                <option value="1095" {% if period == 1095 %}selected{% endif %}>3 года</option>
+            </select>
+        </div>
+
+        <div style="flex:1; min-width:130px;">
+            <label style="display:block; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Мин. вес актива, %</label>
+            <input type="number" step="1" min="0" max="50" name="min_weight" value="{{ min_weight }}" style="width:100%; background:var(--bg-3); border:1px solid var(--border); border-radius:8px; color:var(--text-1); font-family:var(--sans); font-size:13px; padding:9px 12px;">
+        </div>
+
+        <div style="flex:1; min-width:130px;">
+            <label style="display:block; font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Макс. вес актива, %</label>
+            <input type="number" step="1" min="10" max="100" name="max_weight" value="{{ max_weight }}" style="width:100%; background:var(--bg-3); border:1px solid var(--border); border-radius:8px; color:var(--text-1); font-family:var(--sans); font-size:13px; padding:9px 12px;">
+        </div>
+
+        <button type="submit" style="display:inline-flex; align-items:center; background:var(--text-1); color:var(--bg); border:none; border-radius:8px; padding:9px 24px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; height:40px;">
+            Рассчитать
+        </button>
     </form>
 
+    {% if error %}
+    <div style="background:var(--red-dim); border:1px solid rgba(248,113,113,0.2); border-radius:8px; padding:12px 14px; margin-top:14px; font-size:13px; color:var(--red);">
+        {{ error }}
+    </div>
+    {% endif %}
 </div>
 
 {% if portfolio_metrics %}
 
-<div class="dashboard-grid">
-
-    <div class="card-box">
-        <div class="card-title">Ожидаемая доходность</div>
-        <div class="card-value green">+{{ portfolio_metrics.return }}%</div>
-    </div>
-
-    <div class="card-box">
-        <div class="card-title">Риск портфеля</div>
-        <div class="card-value red">{{ portfolio_metrics.risk }}%</div>
-    </div>
-
-    <div class="card-box">
-        <div class="card-title">Коэффициент Шарпа</div>
-        <div class="card-value">{{ portfolio_metrics.sharpe }}</div>
-    </div>
-
-    <div class="card-box">
-        <div class="card-title">Метод</div>
-        <div class="card-value" style="font-size:24px;">Марковиц</div>
-    </div>
-
-</div>
-
-<div class="dashboard-grid">
-
-    <div class="card-box">
-        <div class="card-title">VaR 95%</div>
-        <div class="card-value red">{{ var_data.var_percent }}%</div>
-        <div style="color:#94A3B8;margin-top:8px;">
-            Возможная дневная потеря: {{ var_data.var_money }} $
+<!-- Две стратегии -->
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+    <div style="background:var(--bg-2); border:1px solid rgba(96,165,250,0.25); border-radius:16px; padding:20px 22px;">
+        <div style="font-family:var(--mono); font-size:10px; color:var(--blue); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:14px;">★ Макс. Sharpe — рекомендуемая стратегия</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+            <div>
+                <div style="font-size:11px; color:var(--text-3); margin-bottom:4px;">Доходность</div>
+                <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--green); letter-spacing:-0.03em;">+{{ portfolio_metrics.return }}%</div>
+            </div>
+            <div>
+                <div style="font-size:11px; color:var(--text-3); margin-bottom:4px;">Риск</div>
+                <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--red); letter-spacing:-0.03em;">{{ portfolio_metrics.risk }}%</div>
+            </div>
+            <div>
+                <div style="font-size:11px; color:var(--text-3); margin-bottom:4px;">Sharpe</div>
+                <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--text-1); letter-spacing:-0.03em;">{{ portfolio_metrics.sharpe }}</div>
+            </div>
         </div>
     </div>
-
-    <div class="card-box">
-        <div class="card-title">CVaR 95%</div>
-        <div class="card-value red">{{ var_data.cvar_percent }}%</div>
-        <div style="color:#94A3B8;margin-top:8px;">
-            Средняя потеря в худших сценариях: {{ var_data.cvar_money }} $
+    <div style="background:var(--bg-2); border:1px solid rgba(74,222,128,0.2); border-radius:16px; padding:20px 22px;">
+        <div style="font-family:var(--mono); font-size:10px; color:var(--green); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:14px;">◎ Мин. риск — консервативная стратегия</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+            <div>
+                <div style="font-size:11px; color:var(--text-3); margin-bottom:4px;">Доходность</div>
+                <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--green); letter-spacing:-0.03em;">+{{ minvol_metrics.return }}%</div>
+            </div>
+            <div>
+                <div style="font-size:11px; color:var(--text-3); margin-bottom:4px;">Риск</div>
+                <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--red); letter-spacing:-0.03em;">{{ minvol_metrics.risk }}%</div>
+            </div>
+            <div>
+                <div style="font-size:11px; color:var(--text-3); margin-bottom:4px;">Sharpe</div>
+                <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--text-1); letter-spacing:-0.03em;">{{ minvol_metrics.sharpe }}</div>
+            </div>
         </div>
     </div>
-
-    <div class="card-box">
-        <div class="card-title">Стоимость портфеля</div>
-        <div class="card-value">{{ var_data.portfolio_value }} $</div>
-    </div>
-
-    <div class="card-box">
-        <div class="card-title">Симуляций Монте-Карло</div>
-        <div class="card-value">6000</div>
-    </div>
-
 </div>
 
-<div class="chart-card">
-    <h3 style="font-weight:700;margin-bottom:20px;">
-        Эффективная граница Марковица
-    </h3>
-
-    <canvas id="frontierChart" height="100"></canvas>
-</div>
-
-<div class="chart-card">
-    <h3 style="font-weight:700;margin-bottom:20px;">
-        Monte Carlo simulation
-    </h3>
-
-    <div style="color:#94A3B8;margin-bottom:20px;">
-        Случайная генерация портфелей для поиска лучших соотношений риска и доходности.
+<!-- Рекомендации -->
+{% if optimizer_recommendations %}
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:16px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+        <div style="width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s ease-in-out infinite;"></div>
+        <div style="font-size:14px; font-weight:600; color:var(--text-1);">Рекомендации</div>
     </div>
-
-    <canvas id="monteCarloChart" height="110"></canvas>
-</div>
-
-<div class="chart-card">
-    <h3 style="font-weight:700;margin-bottom:20px;">
-        Корреляционная heatmap
-    </h3>
-
-    <div style="color:#94A3B8;margin-bottom:20px;">
-        Чем выше корреляция между активами, тем слабее эффект диверсификации.
+    {% for rec in optimizer_recommendations %}
+    <div style="background:var(--bg-3); border:1px solid {% if rec.type == 'danger' %}rgba(248,113,113,0.25){% elif rec.type == 'success' %}rgba(74,222,128,0.2){% elif rec.type == 'warning' %}rgba(251,191,36,0.2){% else %}rgba(96,165,250,0.2){% endif %}; border-radius:10px; padding:14px 16px; margin-bottom:10px; display:flex; gap:14px; align-items:flex-start;">
+        <div style="width:8px; height:8px; border-radius:50%; flex-shrink:0; margin-top:4px; background:{% if rec.type == 'danger' %}var(--red){% elif rec.type == 'success' %}var(--green){% elif rec.type == 'warning' %}var(--amber){% else %}var(--blue){% endif %};"></div>
+        <div>
+            <div style="font-size:13px; font-weight:600; color:var(--text-1); margin-bottom:4px;">{{ rec.title }}</div>
+            <div style="font-size:13px; color:var(--text-2); line-height:1.6;">{{ rec.text }}</div>
+        </div>
     </div>
-
-    <div id="correlationHeatmap"></div>
+    {% endfor %}
 </div>
-
 {% endif %}
 
-<div class="table-card">
-
-    <h3 style="font-weight:700;margin-bottom:20px;">
-        Рекомендуемая структура портфеля
-    </h3>
-
-    <table>
+<!-- План ребалансировки -->
+{% if rebalance %}
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:16px;">
+    <div style="padding:16px 22px; border-bottom:1px solid var(--border);">
+        <div style="font-size:14px; font-weight:600; color:var(--text-1);">План ребалансировки</div>
+        <div style="font-size:12px; color:var(--text-3); margin-top:3px;">Конкретные действия для приведения портфеля к оптимальной структуре (Макс. Sharpe)</div>
+    </div>
+    <table style="width:100%; border-collapse:collapse;">
         <thead>
-        <tr>
-            <th>Актив</th>
-            <th>Тикер</th>
-            <th>Тип</th>
-            <th>Историческая доходность</th>
-            <th>Исторический риск</th>
-            <th>Оптимальная доля</th>
-        </tr>
+            <tr>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Актив</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Сейчас</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Цель</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Действие</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Сумма</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Акций</th>
+            </tr>
         </thead>
-
         <tbody>
-        {% for asset in optimized %}
-        <tr>
-            <td>{{ asset.name }}</td>
-            <td>{{ asset.ticker }}</td>
-            <td>{{ asset.asset_type }}</td>
-            <td class="green">+{{ asset.expected_return }}%</td>
-            <td class="red">{{ asset.risk }}%</td>
-            <td>
-                <div style="width:100%;background:#1E293B;border-radius:20px;overflow:hidden;height:18px;">
-                    <div class="progress-fill" style="--progress-width: {{ asset.optimal_weight }}%;"></div>
-                </div>
-                <div style="margin-top:8px;">{{ asset.optimal_weight }}%</div>
+        {% for r in rebalance %}
+        <tr onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background=''">
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                <div style="font-size:13px; font-weight:500; color:var(--text-1);">{{ r.name }}</div>
+                <div style="font-family:var(--mono); font-size:11px; color:var(--text-3); margin-top:2px;">{{ r.ticker }} · ${{ r.price }}</div>
             </td>
-        </tr>
-        {% empty %}
-        <tr>
-            <td colspan="6" style="text-align:center;color:#94A3B8;">
-                Недостаточно данных для оптимизации
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                <div style="font-family:var(--mono); font-size:13px; color:var(--text-1);">{{ r.current_weight }}%</div>
+                <div style="font-size:11px; color:var(--text-3); margin-top:2px;">${{ r.current_val }}</div>
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                <div style="font-family:var(--mono); font-size:13px; color:var(--text-1);">{{ r.optimal_weight }}%</div>
+                <div style="font-size:11px; color:var(--text-3); margin-top:2px;">${{ r.optimal_val }}</div>
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                {% if r.action == 'buy' %}
+                    <span style="display:inline-flex; align-items:center; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--mono); background:var(--green-dim); color:var(--green); border:1px solid rgba(74,222,128,0.2);">↑ Докупить</span>
+                {% elif r.action == 'sell' %}
+                    <span style="display:inline-flex; align-items:center; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--mono); background:var(--red-dim); color:var(--red); border:1px solid rgba(248,113,113,0.2);">↓ Продать</span>
+                {% else %}
+                    <span style="display:inline-flex; align-items:center; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; font-family:var(--mono); background:var(--bg-4); color:var(--text-3); border:1px solid var(--border);">— Держать</span>
+                {% endif %}
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                {% if r.action != 'hold' %}
+                    <div style="font-family:var(--mono); font-size:13px; font-weight:600; color:{% if r.action == 'buy' %}var(--green){% else %}var(--red){% endif %};">${{ r.diff_val }}</div>
+                    <div style="font-size:11px; color:var(--text-3); margin-top:2px;">{{ r.diff_weight }}% портфеля</div>
+                {% else %}
+                    <div style="font-family:var(--mono); font-size:13px; color:var(--text-3);">—</div>
+                {% endif %}
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                {% if r.action != 'hold' %}
+                    <div style="font-family:var(--mono); font-size:13px; color:var(--text-2);">{{ r.shares_diff }}</div>
+                {% else %}
+                    <div style="font-family:var(--mono); font-size:13px; color:var(--text-3);">—</div>
+                {% endif %}
             </td>
         </tr>
         {% endfor %}
         </tbody>
     </table>
+    <div style="padding:14px 22px; border-top:1px solid var(--border); display:flex; gap:32px; flex-wrap:wrap;">
+        <div>
+            <div style="font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">Итого докупить</div>
+            <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--green);">${{ total_to_buy }}</div>
+        </div>
+        <div>
+            <div style="font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">Итого продать</div>
+            <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--red);">${{ total_to_sell }}</div>
+        </div>
+        <div>
+            <div style="font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:4px;">Стоимость портфеля</div>
+            <div style="font-family:var(--mono); font-size:16px; font-weight:600; color:var(--text-1);">${{ var_data.portfolio_value }}</div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
+<!-- VaR карточки -->
+<div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px;">
+    <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:16px 18px;">
+        <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:8px;">VaR 95%</div>
+        <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--red); letter-spacing:-0.03em;">{{ var_data.var_percent }}%</div>
+        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">макс. дневная потеря ${{ var_data.var_money }}</div>
+    </div>
+    <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:16px 18px;">
+        <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:8px;">CVaR 95%</div>
+        <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--red); letter-spacing:-0.03em;">{{ var_data.cvar_percent }}%</div>
+        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">средние потери ${{ var_data.cvar_money }}</div>
+    </div>
+    <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:16px 18px;">
+        <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:8px;">Стоимость</div>
+        <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--text-1); letter-spacing:-0.03em;">${{ var_data.portfolio_value }}</div>
+        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">текущая</div>
+    </div>
+    <div style="background:var(--bg-2); border:1px solid var(--border); border-radius:12px; padding:16px 18px;">
+        <div style="font-family:var(--mono); font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.07em; margin-bottom:8px;">Симуляций</div>
+        <div style="font-family:var(--mono); font-size:22px; font-weight:600; color:var(--text-1); letter-spacing:-0.03em;">1 000</div>
+        <div style="font-size:11px; color:var(--text-3); margin-top:6px;">Monte Carlo</div>
+    </div>
 </div>
 
-<div class="ai-box">
-
-    <h3 style="font-weight:700;">
-        🤖 Интерпретация модели
-    </h3>
-
-    <div class="ai-item">
-        Модель Марковица подбирает структуру портфеля на основе исторической доходности, риска и взаимосвязи активов.
+<!-- Таблица активов -->
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; overflow:hidden; margin-bottom:16px;">
+    <div style="padding:16px 22px; border-bottom:1px solid var(--border);">
+        <div style="font-size:14px; font-weight:600; color:var(--text-1);">Детальный анализ активов</div>
+        <div style="font-size:12px; color:var(--text-3); margin-top:3px;">Реальные метрики из исторических данных</div>
     </div>
-
-    <div class="ai-item">
-        Корреляционная матрица показывает, насколько активы движутся синхронно. Чем ниже корреляция, тем выше эффект диверсификации.
-    </div>
-
-    <div class="ai-item">
-        VaR 95% показывает возможную дневную потерю портфеля в неблагоприятном сценарии с доверительным уровнем 95%.
-    </div>
-
-    <div class="ai-item">
-        Monte Carlo simulation показывает распределение случайных портфелей и помогает визуально определить эффективные комбинации риска и доходности.
-    </div>
-
+    <table style="width:100%; border-collapse:collapse;">
+        <thead>
+            <tr>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Актив</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Тикер</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Реальная доходность</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Реальный риск</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Вес (Макс. Sharpe)</th>
+                <th style="text-align:left; padding:11px 22px; font-size:11px; font-weight:500; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; border-bottom:1px solid var(--border); background:var(--bg-3);">Вес (Мин. риск)</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for asset in optimized %}
+        <tr onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background=''">
+            <td style="padding:14px 22px; font-size:13px; font-weight:500; color:var(--text-1); border-bottom:1px solid var(--border);">{{ asset.name }}</td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border);">
+                <span style="font-family:var(--mono); font-size:12px; color:var(--blue); padding:2px 7px; background:var(--blue-dim); border-radius:4px; border:1px solid rgba(96,165,250,0.15);">{{ asset.ticker }}</span>
+            </td>
+            <td style="padding:14px 22px; font-family:var(--mono); font-size:13px; color:{% if asset.real_return >= 0 %}var(--green){% else %}var(--red){% endif %}; border-bottom:1px solid var(--border);">
+                {% if asset.real_return >= 0 %}+{% endif %}{{ asset.real_return }}%
+            </td>
+            <td style="padding:14px 22px; font-family:var(--mono); font-size:13px; color:var(--red); border-bottom:1px solid var(--border);">{{ asset.real_risk }}%</td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border); min-width:160px;">
+                <div style="height:3px; background:var(--bg-4); border-radius:2px; overflow:hidden; margin-bottom:5px;">
+                    <div style="height:100%; width:{{ asset.optimal_weight }}%; background:var(--blue); border-radius:2px;"></div>
+                </div>
+                <span style="font-family:var(--mono); font-size:12px; color:var(--text-2);">{{ asset.optimal_weight }}%</span>
+            </td>
+            <td style="padding:14px 22px; border-bottom:1px solid var(--border); min-width:160px;">
+                <div style="height:3px; background:var(--bg-4); border-radius:2px; overflow:hidden; margin-bottom:5px;">
+                    <div style="height:100%; width:{{ asset.minvol_weight }}%; background:var(--green); border-radius:2px;"></div>
+                </div>
+                <span style="font-family:var(--mono); font-size:12px; color:var(--text-2);">{{ asset.minvol_weight }}%</span>
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="6" style="text-align:center; color:var(--text-3); padding:48px; font-size:13px;">Недостаточно данных</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
 </div>
 
-<style>
-    .heatmap-grid{
-        display:grid;
-        gap:8px;
-        overflow-x:auto;
-    }
-
-    .heatmap-cell{
-        padding:14px;
-        border-radius:12px;
-        text-align:center;
-        color:white;
-        font-weight:600;
-        min-width:80px;
-    }
-
-    .heatmap-label{
-        padding:14px;
-        color:#CBD5E1;
-        font-weight:600;
-        min-width:80px;
-    }
-</style>
-
-<script>
-    const frontierRisk = JSON.parse('{{ frontier.risk|default:"[]"|safe|escapejs }}');
-    const frontierReturn = JSON.parse('{{ frontier.return|default:"[]"|safe|escapejs }}');
-
-    const monteRisk = JSON.parse('{{ monte_carlo.risk|default:"[]"|safe|escapejs }}');
-    const monteReturn = JSON.parse('{{ monte_carlo.return|default:"[]"|safe|escapejs }}');
-    const monteSharpe = JSON.parse('{{ monte_carlo.sharpe|default:"[]"|safe|escapejs }}');
-
-    const corrTickers = JSON.parse('{{ correlation_matrix.tickers|default:"[]"|safe|escapejs }}');
-    const corrValues = JSON.parse('{{ correlation_matrix.values|default:"[]"|safe|escapejs }}');
-
-    if (frontierRisk.length > 0 && frontierReturn.length > 0) {
-        const points = frontierRisk.map((risk, index) => ({
-            x: risk,
-            y: frontierReturn[index]
-        }));
-
-        new Chart(document.getElementById('frontierChart'), {
-            type: 'scatter',
-            data: {
-                datasets: [{
-                    label: 'Эффективная граница',
-                    data: points,
-                    showLine: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                plugins: {
-                    legend: {
-                        labels: { color: '#E2E8F0' }
-                    }
-                },
-                scales: {
-                    x: {
-                        title: { display: true, text: 'Риск (%)', color: '#94A3B8' },
-                        ticks: { color: '#94A3B8' },
-                        grid: { color: '#1E293B' }
-                    },
-                    y: {
-                        title: { display: true, text: 'Доходность (%)', color: '#94A3B8' },
-                        ticks: { color: '#94A3B8' },
-                        grid: { color: '#1E293B' }
-                    }
-                }
-            }
-        });
-    }
-
-    if (monteRisk.length > 0 && monteReturn.length > 0) {
-        const montePoints = monteRisk.map((risk, index) => ({
-            x: risk,
-            y: monteReturn[index]
-        }));
-
-        new Chart(document.getElementById('monteCarloChart'), {
-            type: 'scatter',
-            data: {
-                datasets: [{
-                    label: 'Случайные портфели',
-                    data: montePoints,
-                    pointRadius: 2
-                }]
-            },
-            options: {
-                plugins: {
-                    legend: {
-                        labels: { color: '#E2E8F0' }
-                    }
-                },
-                scales: {
-                    x: {
-                        title: { display: true, text: 'Риск (%)', color: '#94A3B8' },
-                        ticks: { color: '#94A3B8' },
-                        grid: { color: '#1E293B' }
-                    },
-                    y: {
-                        title: { display: true, text: 'Доходность (%)', color: '#94A3B8' },
-                        ticks: { color: '#94A3B8' },
-                        grid: { color: '#1E293B' }
-                    }
-                }
-            }
-        });
-    }
-
-    function correlationColor(value){
-        const opacity = Math.abs(value);
-        if(value >= 0){
-            return `rgba(34, 197, 94, ${0.25 + opacity * 0.75})`;
-        } else {
-            return `rgba(239, 68, 68, ${0.25 + opacity * 0.75})`;
-        }
-    }
-
-    function renderHeatmap(){
-        const container = document.getElementById('correlationHeatmap');
-
-        if(!container || corrTickers.length === 0){
-            return;
-        }
-
-        const size = corrTickers.length + 1;
-
-        container.className = 'heatmap-grid';
-        container.style.gridTemplateColumns = `repeat(${size}, minmax(80px, 1fr))`;
-
-        container.innerHTML = '';
-
-        container.appendChild(document.createElement('div'));
-
-        corrTickers.forEach(ticker => {
-            const label = document.createElement('div');
-            label.className = 'heatmap-label';
-            label.innerText = ticker;
-            container.appendChild(label);
-        });
-
-        corrValues.forEach((row, i) => {
-            const rowLabel = document.createElement('div');
-            rowLabel.className = 'heatmap-label';
-            rowLabel.innerText = corrTickers[i];
-            container.appendChild(rowLabel);
-
-            row.forEach(value => {
-                const cell = document.createElement('div');
-                cell.className = 'heatmap-cell';
-                cell.innerText = value.toFixed(2);
-                cell.style.background = correlationColor(value);
-                container.appendChild(cell);
-            });
-        });
-    }
-
-    renderHeatmap();
-</script>
-
-{% if ai_recommendations %}
-
-<div class="ai-box">
-
-    <h3 style="font-weight:700;">
-        🤖 AI-анализ портфеля
-    </h3>
-
-    <div
-        class="ai-item"
-        style="
-            white-space:pre-line;
-            line-height:1.8;
-        "
-    >
-        {{ ai_recommendations }}
+<!-- Эффективная граница -->
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:16px;">
+    <div style="margin-bottom:20px;">
+        <div style="font-size:14px; font-weight:600; color:var(--text-1);">Эффективная граница Марковица</div>
+        <div style="font-size:12px; color:var(--text-3); margin-top:3px;">Множество оптимальных портфелей · синяя звезда — макс. Sharpe · зелёная — мин. риск</div>
     </div>
+    <canvas id="frontierChart" height="90"></canvas>
+</div>
 
+<!-- Monte Carlo -->
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:16px;">
+    <div style="margin-bottom:20px;">
+        <div style="font-size:14px; font-weight:600; color:var(--text-1);">Monte Carlo simulation</div>
+        <div style="font-size:12px; color:var(--text-3); margin-top:3px;">1 000 случайных портфелей · цвет — коэффициент Шарпа (красный → зелёный)</div>
+    </div>
+    <canvas id="monteCarloChart" height="100"></canvas>
+</div>
+
+<!-- Корреляционная матрица -->
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:20px 22px; margin-bottom:16px;">
+    <div style="margin-bottom:20px;">
+        <div style="font-size:14px; font-weight:600; color:var(--text-1);">Корреляционная матрица</div>
+        <div style="font-size:12px; color:var(--text-3); margin-top:3px;">Зелёный — активы движутся в разные стороны (лучшая диверсификация) · Красный — движутся вместе</div>
+    </div>
+    <div id="correlationHeatmap"></div>
+</div>
+
+<!-- Интерпретация -->
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:20px 22px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
+        <div style="width:6px; height:6px; border-radius:50%; background:var(--green); animation:pulse 2s ease-in-out infinite;"></div>
+        <div style="font-size:13px; font-weight:600; color:var(--text-1);">Как читать результаты</div>
+    </div>
+    <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--text-2); line-height:1.6; margin-bottom:8px;">
+        <strong style="color:var(--blue);">Макс. Sharpe</strong> — оптимальный портфель с наилучшим соотношением доходности и риска. Рекомендуется как основная стратегия. Sharpe > 1 считается хорошим результатом.
+    </div>
+    <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--text-2); line-height:1.6; margin-bottom:8px;">
+        <strong style="color:var(--green);">Мин. риск</strong> — консервативный портфель с минимальной волатильностью. Подходит если важнее сохранить капитал, а не максимизировать доходность.
+    </div>
+    <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--text-2); line-height:1.6; margin-bottom:8px;">
+        <strong style="color:var(--red);">VaR 95%</strong> — с вероятностью 95% ваши дневные потери не превысят это значение. Рассчитано на реальных исторических данных.
+    </div>
+    <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:12px 14px; font-size:13px; color:var(--text-2); line-height:1.6;">
+        <strong style="color:var(--text-1);">План ребалансировки</strong> — конкретные покупки и продажи для приведения вашего текущего портфеля к оптимальной структуре. Обновляйте после каждой сделки.
+    </div>
+</div>
+
+{% else %}
+
+<div style="background:var(--bg-2); border:1px solid var(--border); border-radius:16px; padding:60px; text-align:center;">
+    <div style="font-size:32px; margin-bottom:16px;">⌀</div>
+    <div style="font-size:15px; font-weight:500; color:var(--text-1); margin-bottom:8px;">Расчёт не запущен</div>
+    <div style="font-size:13px; color:var(--text-3); margin-bottom:6px;">Задайте параметры выше и нажмите «Рассчитать»</div>
+    <div style="font-size:12px; color:var(--text-3);">Необходимо минимум 2 актива с корректными тикерами</div>
 </div>
 
 {% endif %}
+
+<script>
+const frontierRisk   = JSON.parse('{{ frontier.risk|default:"[]"|safe|escapejs }}');
+const frontierReturn = JSON.parse('{{ frontier.return|default:"[]"|safe|escapejs }}');
+const monteRisk      = JSON.parse('{{ monte_carlo.risk|default:"[]"|safe|escapejs }}');
+const monteReturn    = JSON.parse('{{ monte_carlo.return|default:"[]"|safe|escapejs }}');
+const monteSharpe    = JSON.parse('{{ monte_carlo.sharpe|default:"[]"|safe|escapejs }}');
+const corrTickers    = JSON.parse('{{ correlation_matrix.tickers|default:"[]"|safe|escapejs }}');
+const corrValues     = JSON.parse('{{ correlation_matrix.values|default:"[]"|safe|escapejs }}');
+
+const pointSharpeRisk   = parseFloat('{{ point_sharpe.risk|default:"0" }}')   || 0;
+const pointSharpeReturn = parseFloat('{{ point_sharpe.return|default:"0" }}') || 0;
+const pointMinvolRisk   = parseFloat('{{ point_minvol.risk|default:"0" }}')   || 0;
+const pointMinvolReturn = parseFloat('{{ point_minvol.return|default:"0" }}') || 0;
+
+const gridColor = 'rgba(255,255,255,0.04)';
+const tickColor = '#60606e';
+
+// ── Эффективная граница ────────────────────────────────────────────────────
+if (document.getElementById('frontierChart')) {
+    if (frontierRisk.length > 1) {
+        new Chart(document.getElementById('frontierChart'), {
+            type: 'scatter',
+            data: {
+                datasets: [
+                    {
+                        label: 'Эффективная граница',
+                        data: frontierRisk.map((r, i) => ({ x: r, y: frontierReturn[i] })),
+                        showLine: true,
+                        tension: 0.4,
+                        borderColor: 'rgba(96,165,250,0.9)',
+                        borderWidth: 2,
+                        backgroundColor: 'transparent',
+                        pointRadius: 0,
+                    },
+                    {
+                        label: 'Макс. Sharpe',
+                        data: [{ x: pointSharpeRisk, y: pointSharpeReturn }],
+                        pointRadius: 10,
+                        pointStyle: 'star',
+                        backgroundColor: 'rgba(96,165,250,1)',
+                        borderColor: 'rgba(96,165,250,1)',
+                    },
+                    {
+                        label: 'Мин. риск',
+                        data: [{ x: pointMinvolRisk, y: pointMinvolReturn }],
+                        pointRadius: 10,
+                        pointStyle: 'star',
+                        backgroundColor: 'rgba(74,222,128,1)',
+                        borderColor: 'rgba(74,222,128,1)',
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: tickColor, font: { size: 12 } } } },
+                scales: {
+                    x: { title: { display: true, text: 'Риск (%)', color: tickColor }, ticks: { color: tickColor, font: { size: 11 } }, grid: { color: gridColor } },
+                    y: { title: { display: true, text: 'Доходность (%)', color: tickColor }, ticks: { color: tickColor, font: { size: 11 } }, grid: { color: gridColor } }
+                }
+            }
+        });
+    } else {
+        document.getElementById('frontierChart').style.display = 'none';
+        document.getElementById('frontierChart').insertAdjacentHTML('afterend', '<div style="text-align:center; color:var(--text-3); padding:40px; font-size:13px;">Добавьте больше активов для построения границы</div>');
+    }
+}
+
+// ── Monte Carlo ────────────────────────────────────────────────────────────
+if (document.getElementById('monteCarloChart') && monteRisk.length > 0) {
+    const minS = Math.min(...monteSharpe);
+    const maxS = Math.max(...monteSharpe);
+
+    const colors = monteSharpe.map(s => {
+        const t = (s - minS) / (maxS - minS || 1);
+        const r = Math.round(248 - t * 174);
+        const g = Math.round(113 + t * 109);
+        const b = Math.round(113 - t * 40);
+        return `rgba(${r},${g},${b},0.55)`;
+    });
+
+    new Chart(document.getElementById('monteCarloChart'), {
+        type: 'scatter',
+        data: {
+            datasets: [
+                {
+                    label: 'Случайные портфели',
+                    data: monteRisk.map((r, i) => ({ x: r, y: monteReturn[i] })),
+                    pointRadius: 2,
+                    backgroundColor: colors,
+                },
+                {
+                    label: 'Макс. Sharpe',
+                    data: [{ x: pointSharpeRisk, y: pointSharpeReturn }],
+                    pointRadius: 10, pointStyle: 'star',
+                    backgroundColor: 'rgba(96,165,250,1)',
+                    borderColor: 'rgba(96,165,250,1)',
+                },
+                {
+                    label: 'Мин. риск',
+                    data: [{ x: pointMinvolRisk, y: pointMinvolReturn }],
+                    pointRadius: 10, pointStyle: 'star',
+                    backgroundColor: 'rgba(74,222,128,1)',
+                    borderColor: 'rgba(74,222,128,1)',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { labels: { color: tickColor, font: { size: 12 } } } },
+            scales: {
+                x: { title: { display: true, text: 'Риск (%)', color: tickColor }, ticks: { color: tickColor, font: { size: 11 } }, grid: { color: gridColor } },
+                y: { title: { display: true, text: 'Доходность (%)', color: tickColor }, ticks: { color: tickColor, font: { size: 11 } }, grid: { color: gridColor } }
+            }
+        }
+    });
+}
+
+// ── Корреляционная матрица ─────────────────────────────────────────────────
+function corrColor(v) {
+    const o = Math.abs(v);
+    return v >= 0
+        ? `rgba(248,113,113,${0.12 + o * 0.65})`
+        : `rgba(74,222,128,${0.12 + o * 0.65})`;
+}
+
+(function renderHeatmap() {
+    const container = document.getElementById('correlationHeatmap');
+    if (!container || corrTickers.length === 0) return;
+
+    container.style.cssText = `display:grid; grid-template-columns:120px repeat(${corrTickers.length},1fr); gap:3px; overflow-x:auto;`;
+    container.innerHTML = '';
+
+    container.appendChild(document.createElement('div'));
+    corrTickers.forEach(t => {
+        const el = document.createElement('div');
+        el.style.cssText = 'padding:8px 4px; font-family:var(--mono); font-size:11px; color:var(--text-3); text-align:center; font-weight:500;';
+        el.innerText = t;
+        container.appendChild(el);
+    });
+
+    corrValues.forEach((row, i) => {
+        const label = document.createElement('div');
+        label.style.cssText = 'padding:8px 4px; font-family:var(--mono); font-size:11px; color:var(--text-3); display:flex; align-items:center;';
+        label.innerText = corrTickers[i];
+        container.appendChild(label);
+
+        row.forEach(v => {
+            const cell = document.createElement('div');
+            cell.style.cssText = `padding:10px 4px; border-radius:6px; text-align:center; font-family:var(--mono); font-size:12px; font-weight:500; background:${corrColor(v)}; color:${Math.abs(v) > 0.5 ? '#f1f1f3' : '#a0a0ab'};`;
+            cell.innerText = v.toFixed(2);
+            container.appendChild(cell);
+        });
+    });
+})();
+</script>
 
 {% endblock %}

@@ -1,5 +1,27 @@
 {% extends 'core/base.html' %}
 {% block content %}
-<h2 class="page-title">Удаление актива</h2>
-<div class="card shadow-sm"><div class="card-body"><p>Вы действительно хотите удалить актив <strong>{{ asset.name }}</strong>?</p><form method="post">{% csrf_token %}<button type="submit" class="btn btn-danger">Удалить</button> <a href="{% url 'dashboard' %}" class="btn btn-secondary">Отмена</a></form></div></div>
+
+<div style="max-width:440px; margin:40px auto;">
+    <div class="card">
+        <div style="margin-bottom:20px;">
+            <div style="font-size:11px; color:var(--text-3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Подтверждение</div>
+            <div class="page-title" style="font-size:17px;">Удаление актива</div>
+        </div>
+
+        <div style="background:var(--red-dim); border:1px solid rgba(248,113,113,0.2); border-radius:var(--radius); padding:14px 16px; margin-bottom:20px;">
+            <div style="font-size:13px; color:var(--text-2);">
+                Актив <strong style="color:var(--text-1);">{{ asset.name }}</strong> будет удалён без возможности восстановления.
+            </div>
+        </div>
+
+        <form method="post">
+            {% csrf_token %}
+            <div style="display:flex; gap:10px;">
+                <button type="submit" class="btn-danger">Удалить</button>
+                <a href="{% url 'dashboard' %}" class="btn-ghost">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% endblock %}

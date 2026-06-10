@@ -49,9 +49,6 @@ def main():
     run(f'{sys.executable} manage.py makemigrations', check=False)
     run(f'{sys.executable} manage.py migrate')
 
-    print('\n[3/4] Создание администратора (Ctrl+C чтобы пропустить)...')
-    run(f'{sys.executable} manage.py createsuperuser', check=False)
-
     print('\n[4/4] Запуск сервера...')
     print('      http://127.0.0.1:8000')
     print('      Ctrl+C для остановки\n')

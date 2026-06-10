@@ -94,7 +94,8 @@ def dashboard(request):
 
 
 def _calc_period_return(assets, period):
-    if not assets:
+
+    if not assets.exists():
         return 0
     tickers = [a.ticker for a in assets]
     days    = {'1w': 7, '1m': 30, '3m': 90, '6m': 180, '1y': 365, 'all': 1825}.get(period, 1825)
@@ -111,13 +112,25 @@ def _calc_period_return(assets, period):
         total_then = 0
 
         for asset in assets:
-            t    = yf.Ticker(asset.ticker)
-            hist = t.history(start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'))
+            t = yf.Ticker(asset.ticker)
+
+            hist = t.history(
+                start=start.strftime('%Y-%m-%d'),
+                end=end.strftime('%Y-%m-%d')
+            )
+
             if hist.empty:
                 continue
-            price_now  = float(hist['Close'].iloc[-1])
-            price_then = float(hist['Close'].iloc[0])
-            total_now  += price_now  * float(asset.quantity)
+
+            close_prices = hist['Close'].dropna()
+
+            if len(close_prices) < 2:
+                continue
+
+            price_now = float(close_prices.iloc[-1])
+            price_then = float(close_prices.iloc[0])
+
+            total_now += price_now * float(asset.quantity)
             total_then += price_then * float(asset.quantity)
 
         if total_then == 0:
@@ -425,6 +438,7 @@ def asset_price_history(request, asset_id):
     try:
         ticker = yf.Ticker(asset.ticker)
         hist   = ticker.history(period=period)
+        hist = hist.dropna(subset=['Close'])
         if hist.empty:
             return JsonResponse({'labels': [], 'prices': [], 'ticker': asset.ticker})
         labels = [str(d.date()) for d in hist.index]
